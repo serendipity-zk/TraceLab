@@ -434,12 +434,17 @@ def plot_prefix_append_scatter(
             linewidths=0,
             color=plot_color(label, index),
             label=f"{short_label(label)} (sample n={len(xs):,})",
+            rasterized=True,  # keep points raster so the PDF stays small; axes/text stay vector
         )
 
     ax.legend(fontsize=8.5, markerscale=2)
     fig.tight_layout()
     out = output_dir / "prefix_vs_append_sample.png"
     fig.savefig(out, dpi=180, bbox_inches="tight", facecolor="white")
+    # Vector PDF for the paper (rasterized point cloud at the same dpi, vector axes/labels).
+    fig.savefig(
+        output_dir / "prefix_vs_append_sample.pdf", dpi=180, bbox_inches="tight", facecolor="white"
+    )
     plt.close(fig)
     print(f"Saved {out}", file=sys.stderr)
 
@@ -490,6 +495,7 @@ def plot_append_weighted_bins(
         caption="Most Rounds Are Small — But Most Tokens Come From the Rare Large Rounds",
         legend_title="Append Length per Round (tokens)",
         out_name="append_tokens_weighted_bins.png",
+        compact=True,  # single-LaTeX-column profile for the paper figure
     )
 
 
