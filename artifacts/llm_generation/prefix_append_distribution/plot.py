@@ -401,9 +401,8 @@ def plot_prefix_append_scatter(
     plotted_groups = [label for label, _count in counts.most_common(max_groups)]
 
     fig, ax = plt.subplots(figsize=(8, 6.5))
-    ax.set_title("Prefix vs Append Tokens")
-    ax.set_xlabel("Prefix Tokens (binary scale)")
-    ax.set_ylabel("Append Tokens (binary scale)")
+    ax.set_xlabel("Prefix Tokens", fontsize=19)
+    ax.set_ylabel("Append Tokens", fontsize=19)
     ax.grid(True, alpha=0.3, which="both")
 
     prefixes = [prefix for _group, prefix, _append in values]
@@ -422,6 +421,7 @@ def plot_prefix_append_scatter(
         max_value=max(appends) if appends else 1.0,
         first_tick=append_first_tick,
     )
+    ax.tick_params(axis="both", labelsize=15)
 
     for index, label in enumerate(plotted_groups):
         xs = [prefix for group, prefix, _append in values if group == label]
@@ -437,7 +437,7 @@ def plot_prefix_append_scatter(
             rasterized=True,  # keep points raster so the PDF stays small; axes/text stay vector
         )
 
-    ax.legend(fontsize=8.5, markerscale=2)
+    ax.legend(fontsize=14, markerscale=2)
     fig.tight_layout()
     out = output_dir / "prefix_vs_append_sample.png"
     fig.savefig(out, dpi=180, bbox_inches="tight", facecolor="white")

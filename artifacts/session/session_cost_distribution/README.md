@@ -7,9 +7,9 @@ For each granularity (per session, per request, per step) and each billed catego
 table reports the **cost** as avg / p50 / p90 / p99 plus the category's share of total spend
 (the script also prints the underlying token distributions, incl. p25, to stdout):
 
-- **New input (append)** — `newly_append_tokens`, billed at the fresh-input rate.
-- **Cached input (prefix)** — `prefix_tokens`, billed at the cache-read rate.
-- **Output** — `output_tokens` (reasoning included), billed at the output rate.
+- **Append tokens** — `newly_append_tokens`, billed at the fresh-input rate.
+- **Prefix tokens** — `prefix_tokens`, billed at the cache-read rate.
+- **Output tokens** — `output_tokens` (reasoning included), billed at the output rate.
 - **Total** — the sum of the three.
 
 ## Definitions (reused so the numbers reconcile)
