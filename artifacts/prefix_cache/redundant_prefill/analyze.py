@@ -209,9 +209,9 @@ def write_latex_table(path: Path, accums: dict[tuple[str, str], FreshAccum]) -> 
         "% ==========================================================================",
         "\\begin{table}[t]",
         "\\centering",
-        "\\caption{Fresh prefill versus total prefilled (append) tokens, by provider and step "
+        "\\caption{Fresh prefill versus total append tokens, by provider and step "
         "trigger. \\emph{Fresh} tokens are the per-step context growth minus the prior step's "
-        "output; \\emph{prefill amplification} is append${}/{}$fresh.}",
+        "output tokens; \\emph{prefill amplification} is append tokens${}/{}$fresh.}",
         "\\label{tab:redundant_prefill}",
         "\\small",
         "\\setlength{\\tabcolsep}{6pt}",

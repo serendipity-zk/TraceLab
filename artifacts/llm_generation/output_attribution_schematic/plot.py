@@ -99,7 +99,7 @@ def plot(output_dir: Path, compact: bool = True) -> None:
             fontsize=fs_title, fontweight="semibold", ha="left", va="center")
     _bar(ax, a_prior, PRIOR, ("10", "2", "4"), fs_seg)
     # next prefix equals the entire prior composition: 10 + 2 + 4 = 16.
-    _bar(ax, a_next, A_NEXT, ("16", "1", "2"), fs_seg)
+    _bar(ax, a_next, A_NEXT, ("10 + 2 + 4", "1", "2"), fs_seg)
     ax.plot([PRIOR_TOTAL, PRIOR_TOTAL], [a_next - 0.45, a_prior + 0.45],
             ls="--", color=MUTED_TEXT, lw=0.85, zorder=4)
 
@@ -109,7 +109,7 @@ def plot(output_dir: Path, compact: bool = True) -> None:
     _bar(ax, b_prior, PRIOR, ("10", "2", "4"), fs_seg)
     # next prefix stops at prior prefix + input; its new-input slice is prior
     # output (4) plus one genuinely new token unit.
-    _bar(ax, b_next, B_NEXT, ("12", "4+1", "2"), fs_seg)
+    _bar(ax, b_next, B_NEXT, ("10 + 2", "4+1", "2"), fs_seg)
     ax.plot([PRIOR_PREFIX_PLUS_INPUT, PRIOR_PREFIX_PLUS_INPUT], [b_next - 0.45, b_prior + 0.45],
             ls="--", color=MUTED_TEXT, lw=0.85, zorder=4)
 

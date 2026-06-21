@@ -6,9 +6,9 @@
 For each provider we report, over all LLM steps (rounds), the avg / p25 / p50 /
 p90 / p99 of three per-step token counts:
 
-* **Cache-read prefix** -- ``prefix_tokens`` (the replayed accumulated context).
-* **New append (uncached input)** -- ``newly_append_tokens`` (freshly added input).
-* **Output** -- ``output_tokens`` (generated tokens, reasoning included).
+* **Prefix tokens** -- ``prefix_tokens`` (the replayed accumulated context).
+* **Append tokens** -- ``newly_append_tokens`` (freshly added uncached input).
+* **Output tokens** -- ``output_tokens`` (generated tokens, reasoning included).
 
 The prefix/append split mirrors ``llm_generation/prefix_append_distribution`` and
 the output column mirrors ``llm_generation/output_tokens``; here we additionally
@@ -38,9 +38,9 @@ PERCENTILES = (25, 50, 90, 99)
 PROVIDERS = (("claude", "Claude"), ("codex", "Codex"))
 # (column, block label) -- order: prefix, append (= input length), then output.
 METRICS = (
-    ("prefix_tokens", "Cache-read prefix"),
-    ("newly_append_tokens", "New append (uncached input)"),
-    ("output_tokens", "Output"),
+    ("prefix_tokens", "Prefix tokens"),
+    ("newly_append_tokens", "Append tokens"),
+    ("output_tokens", "Output tokens"),
 )
 
 
@@ -85,11 +85,7 @@ def render_tex(stats: dict[str, dict[str, dict[str, float]]]) -> str:
         "% not edit by hand; re-run on the trace to refresh.",
         "\\begin{table}[t]",
         "\\centering",
-        "\\caption{Per-step input and output token-length distribution, by provider. "
-        "\\emph{Cache-read prefix} is the replayed accumulated context (\\texttt{prefix\\_tokens}); "
-        "\\emph{new append} is the freshly added uncached input (\\texttt{newly\\_append\\_tokens}); "
-        "\\emph{output} is generated tokens with reasoning included (\\texttt{output\\_tokens}). "
-        "Statistics are per LLM step over all valid rounds.}",
+        "\\caption{Per-step prefix, append, and output token length distribution.}",
         "\\label{tab:token_length_distribution}",
         "\\small",
         "\\setlength{\\tabcolsep}{4pt}",

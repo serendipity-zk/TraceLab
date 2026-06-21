@@ -84,8 +84,8 @@ def render_tex(data: dict[str, dict[str, dict[str, float]]]) -> str:
         "% edit by hand; re-run on the trace to refresh.",
         "\\begin{table}[t]",
         "\\centering",
-        "\\caption{Newly appended (uncached) tokens per step, conditioned on the cached-prefix "
-        "size, for each provider. Prefix bins are doubling, in 1024-token units; \\emph{Steps} "
+        "\\caption{Append tokens per step, conditioned on the number of prefix tokens, "
+        "for each provider. Prefix bins are doubling, in 1024-token units; \\emph{Steps} "
         "is the number of steps in the bin.}",
         "\\label{tab:append_by_prefix}",
         "\\small",

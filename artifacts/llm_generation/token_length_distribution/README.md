@@ -9,9 +9,9 @@ and *Output length distribution* subsections (`tab:token_length_distribution` in
 `src/05_LLMGeneration.tex`). For each provider (Claude, Codex), over **all LLM steps** (rounds), it
 reports the avg / p25 / p50 / p90 / p99 of three per-step token counts:
 
-- **Cache-read prefix** — `prefix_tokens`, the replayed accumulated context.
-- **New append (uncached input)** — `newly_append_tokens`, the freshly added input.
-- **Output** — `output_tokens`, generated tokens with reasoning included.
+- **Prefix tokens** — `prefix_tokens`, the replayed accumulated context.
+- **Append tokens** — `newly_append_tokens`, the freshly added uncached input.
+- **Output tokens** — `output_tokens`, generated tokens with reasoning included.
 
 The prefix/append split is the same decomposition as
 `llm_generation/prefix_append_distribution`, and the output column is the same metric as

@@ -5,9 +5,9 @@ Cost Distribution table (``tab:cost_distribution`` in ``src/04_SessionContext.te
 For each granularity we break the workload into the three billed categories and report, for
 both the token count and the USD cost, avg / p25 / p50 / p90 / p99:
 
-* **New input (append)** -- ``newly_append_tokens``, billed at the fresh-input rate.
-* **Cached input (prefix)** -- ``prefix_tokens``, billed at the cache-read rate.
-* **Output** -- ``output_tokens`` (reasoning included), billed at the output rate.
+* **Append tokens** -- ``newly_append_tokens``, billed at the fresh-input rate.
+* **Prefix tokens** -- ``prefix_tokens``, billed at the cache-read rate.
+* **Output tokens** -- ``output_tokens`` (reasoning included), billed at the output rate.
 * **Total** -- the sum of the three.
 
 Cost rows also carry each category's **share of total spend** (the same three numbers for any
@@ -50,9 +50,9 @@ GRANULARITIES = (("session", "Per session"), ("request", "Per request"), ("step"
 # (key, label) -- order follows the paper's wording: new append, prefix, output, then total.
 CATEGORIES = (
     ("total", "Total"),
-    ("append", "New input (append)"),
-    ("prefix", "Cached input (prefix)"),
-    ("output", "Output"),
+    ("append", "Append tokens"),
+    ("prefix", "Prefix tokens"),
+    ("output", "Output tokens"),
 )
 _PER_M = 1_000_000
 
@@ -201,7 +201,12 @@ def money(x: float, tex: bool = False) -> str:
 
 
 # Short row labels for the cost-only table (the full names live in CATEGORIES / the caption).
-SHORT_LABEL = {"total": "Total", "append": "New input", "prefix": "Cached", "output": "Output"}
+SHORT_LABEL = {
+    "total": "Total",
+    "append": "Append tokens",
+    "prefix": "Prefix tokens",
+    "output": "Output tokens",
+}
 
 
 def render_tex(units: dict[str, dict[str, list[dict]]], meta: dict[str, int]) -> str:
@@ -219,8 +224,8 @@ def render_tex(units: dict[str, dict[str, list[dict]]], meta: dict[str, int]) ->
         "\\begin{table}[t]",
         "\\centering",
         "\\caption{Per-session, per-request, and per-step cost (USD) by category. List prices "
-        "(\\texttt{pricing.json}, as of 2026-06): new input (append) at the fresh-input rate, "
-        "cached input (prefix) at the cache-read rate, output at the output rate; "
+        "(\\texttt{pricing.json}, as of 2026-06): append tokens at the fresh-input rate, "
+        "prefix tokens at the cache-read rate, output tokens at the output rate; "
         f"{priced_pct:.1f}\\% of rounds priced. \\emph{{\\% cost}} is each category's share of "
         "total spend (identical across groupings).}",
         "\\label{tab:cost_distribution}",
