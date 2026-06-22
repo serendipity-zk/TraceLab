@@ -1,35 +1,227 @@
 ---
 name: tracelab-public-release
-description: Publish TraceLab public snapshots from the private/internal repo to the public uw-syfi/TraceLab GitHub repo through draft pull requests. Use when adding or checking the public remote, exporting a public tree without internal history, drafting a public snapshot PR, or creating GitHub releases with syfi_coding_trace.jsonl.gz and syfi_coding_trace.duckdb assets after the PR is merged.
+description: Publish TraceLab snapshots from the internal repo to the public uw-syfi/TraceLab GitHub repo as clean, mergeable, incremental pull requests from a persistent public mirror branch. Use when refreshing the public site/artifacts, drafting a public release PR, reconciling a diverged public branch, or creating GitHub releases with syfi_coding_trace.jsonl.gz and syfi_coding_trace.duckdb assets after the PR is merged.
 ---
 
 # TraceLab Public Release
 
 ## Purpose
 
-Use this skill to draft curated TraceLab public snapshot pull requests from the internal repository to
-the public repository:
+Publish curated TraceLab snapshots from the internal repository to the public repository:
 
 ```text
 https://github.com/uw-syfi/TraceLab.git
 ```
 
-The public repo must receive release snapshots, not the internal commit history. Do not push
-snapshots directly to `main`; open a draft PR for review.
+as **incremental, mergeable pull requests** that preserve git ancestry, so every release shows
+only its true net diff and can be merged without conflicts. Do not push snapshots directly to the
+public `main`; open a (draft) PR for review.
+
+## Mental model — why ancestry matters
+
+The public repo must always be reachable as an **ancestor** of the branch you open the PR from.
+When that holds, GitHub's PR diff (merge-base...head) equals the real net change and the PR merges
+cleanly. When it does not, git falls back to an ancient common ancestor and reports **phantom
+conflicts** — add/add on every new file and content conflicts on every edited file — even though
+the branch is a clean superset of what the public repo already has.
+
+This is exactly what the old "export to a temp dir, wipe a clean clone of public, copy the export,
+commit one snapshot" method caused: each release landed in public as a **detached snapshot commit**
+with no shared history with the source branch. The next fork→public PR then diffed against the last
+truly shared commit (e.g. an early `Merge PR #1`), surfacing hundreds of files that were never
+actually in conflict. **Do not publish by wipe-and-snapshot anymore.** Publish from a persistent
+mirror whose history stays linked to public.
+
+## Remotes
+
+| Remote   | URL                                            | Role                                                        |
+| -------- | ---------------------------------------------- | ----------------------------------------------------------- |
+| `origin` | internal source of truth (private)             | Internal development. Never the PR target.                  |
+| `public` | `https://github.com/uw-syfi/TraceLab.git`      | PR target. **Never push to its `main` directly.**           |
+| `fork`   | `https://github.com/serendipity-zk/TraceLab.git` | The **public mirror**. Push the release branch here; open the PR from it. |
+
+The mirror branch (the fork's `main`; commonly checked out locally as `fork-main`) **is** the
+public-safe history. Keep it linked to `public/main`.
 
 ## Guardrails
 
 1. Treat `origin` as the internal/source-of-truth remote unless the user says otherwise.
-2. Add/use a separate `public` remote for `https://github.com/uw-syfi/TraceLab.git`.
-3. Do not normal-merge internal branches into public. Draft a PR containing a public export snapshot.
-4. Do not commit trace data to Git. Release data files belong only on GitHub Releases.
-5. Keep ignored/local files such as `trace/*.jsonl*`, `trace/*.duckdb`, `trace.tar.gz`, generated artifact outputs, and server runtime data out of the public Git tree.
+2. Never push to the public `main`. Push only to the `fork` mirror (its `main` or a release branch)
+   and open a PR into `public:main`.
+3. Keep `public/main` an **ancestor** of the branch you open the PR from. Reconcile first (below)
+   whenever it is not — never open a PR that GitHub reports as conflicting.
+4. Do not commit trace data to Git. Release data files belong only on GitHub Releases. Keep
+   ignored/local files such as `trace/*.jsonl*`, `trace/*.duckdb`, `trace.tar.gz`, generated
+   artifact outputs, and server runtime data out of the public tree.
+5. When a reconciling merge conflicts, resolve in favor of the **mirror** for content the mirror has
+   advanced — but first confirm no genuine public-only commit (community PR, hotfix) or public-only
+   file is being dropped.
 6. Preserve the web product title `SyFI Trace Atlas` unless the user explicitly asks to rename it.
-7. Do not push directly to the public `main` branch. Push only a release branch and create a draft PR.
+7. Do not put dates in PR titles or branch names. Name the branch after the actual release theme.
 
-## Standard Release Assets
+## Release workflow
 
-Upload both assets when creating a public data release:
+### 1. Sync and inspect
+
+```bash
+git fetch public
+git fetch fork
+git status --short --branch
+git remote -v
+```
+
+Add the public/fork remotes if missing:
+
+```bash
+git remote add public https://github.com/uw-syfi/TraceLab.git
+git remote add fork   https://github.com/serendipity-zk/TraceLab.git
+```
+
+### 2. Land intentional changes on the mirror
+
+Check out the mirror branch (e.g. `fork-main`) and make sure every change you intend to publish is
+committed there. Do not try to snapshot a dirty worktree — commit the intentional source/doc changes
+first, and leave ignored trace data and generated outputs uncommitted.
+
+### 3. Re-link ancestry (the key step)
+
+Make `public/main` an ancestor of the mirror by merging it in:
+
+```bash
+git merge --no-ff public/main
+```
+
+- If `public/main` is already an ancestor, this is a no-op or fast-forward — skip to step 4.
+- If it conflicts, the conflicts are almost certainly **phantom** (public holds an older copy of the
+  same lineage from a prior snapshot release). Confirm the mirror is the newer superset and resolve
+  every conflict to the mirror, then verify nothing real was dropped:
+
+  ```bash
+  # see why each side diverged — public's version should be a subset of the mirror's
+  git diff <merge-base> public/main -- <file>     # what the public snapshot changed
+  git diff <merge-base> fork-main  -- <file>      # what the mirror changed (should subsume it)
+
+  # resolve all conflicts to the mirror
+  for f in $(git diff --name-only --diff-filter=U); do git checkout --ours -- "$f" && git add -- "$f"; done
+
+  # SAFETY: no files exist only in public, and no non-export public commits are being skipped
+  comm -23 <(git ls-tree -r --name-only public/main | sort) <(git ls-tree -r --name-only fork-main | sort)
+  git log --oneline <merge-base>..public/main      # every entry should be an export/snapshot, not a community PR
+  ```
+
+  If a real public-only file or community commit exists, stop and merge it into the mirror properly
+  instead of discarding it. Otherwise commit the reconciling merge:
+
+  ```bash
+  git commit --no-edit
+  ```
+
+Verify ancestry is now linked and the PR will be clean:
+
+```bash
+git merge-base --is-ancestor public/main fork-main && echo linked
+git diff --name-only public/main...fork-main | wc -l   # three-dot (what GitHub shows)
+git diff --name-only public/main    fork-main | wc -l   # two-dot (true delta) — must match
+```
+
+### 4. Review the real net diff
+
+Review the entire net diff before naming the branch/PR — this is what you are publishing. Do not
+summarize only your own recent edits.
+
+```bash
+git diff --name-status public/main fork-main
+git diff --stat        public/main fork-main
+```
+
+Read enough changed files to understand the release scope, by area:
+
+- top-level docs and config (`README.md`, `artifacts/README.md`, `config/services.json`, `.gitignore`)
+- new/changed artifact READMEs and analysis scripts, grouped by category
+- renamed or moved tools (e.g. `replay/`, web/AI infrastructure)
+- web UI changes under `web/app/src` and helper scripts under `web/scripts` / `web/tools`
+- deleted files, renames, and generated-file removals
+
+### 5. Public-safety checks
+
+```bash
+find trace -maxdepth 2 -type f 2>/dev/null | sort
+find . -maxdepth 4 \( -name '*.duckdb' -o -name '*.jsonl.gz' -o -name '*.jsonl' \)
+rg -n '/m-coriander|coding_trace_refactor|serendipity-zk|coding-trace-collect|API_KEY=' . -g '!web/app/dist/**' -g '!.codex/**'
+git diff --check
+```
+
+Benign matches (documentation naming environment variables, this skill referencing the scan
+patterns) are fine. Internal absolute paths, private remotes, secrets, trace data, or generated
+runtime data must be removed or explicitly justified before continuing. Scan the **net diff added
+lines** specifically:
+
+```bash
+git diff public/main fork-main | grep -E '^\+' | rg '/m-coriander|coding_trace_refactor|serendipity-zk|API_KEY='
+```
+
+### 6. Push the mirror and open a draft PR
+
+Push the mirror branch to the fork (its `main`, or a dedicated release branch if you prefer not to
+move the mirror's `main` until merge):
+
+```bash
+git push fork fork-main:main
+# or a topic branch off the mirror:
+# git push fork fork-main:refresh-meaningful-topic
+```
+
+Choose a descriptive topic from the actual diff (not "public-snapshot", no dates). Open a **draft**
+PR into the public `main`:
+
+```bash
+gh pr create \
+  --repo uw-syfi/TraceLab \
+  --base main \
+  --head serendipity-zk:main \
+  --draft \
+  --title "Refresh artifact analyses, detail UI, and Chinese docs" \
+  --body-file /tmp/tracelab-public-pr-body.md
+```
+
+Suggested PR body structure:
+
+```markdown
+## What this changes
+One paragraph describing the actual release theme.
+
+## Main updates
+- Artifacts / analyses: ...
+- Web UI: ...
+- Tooling / docs: ...
+
+## Public-release safety
+- public/main is an ancestor of this branch; the diff is the true net change and merges cleanly.
+- No trace release data files are committed to Git.
+- Internal absolute paths, private remotes, and secrets were scanned.
+- Release assets will be uploaded only after review and merge.
+```
+
+### 7. Keep ancestry intact on merge
+
+How the public PR is merged decides whether the *next* release is clean:
+
+- Prefer **"Create a merge commit"** or **"Rebase and merge"** — these keep `public/main` reachable
+  from the mirror, so the next release needs no reconciliation.
+- A **squash merge** re-detaches history (it creates a new commit not in the mirror). That is
+  allowed, but the next release must redo the step-3 reconciling merge to re-link ancestry.
+
+After merge, fast-forward the mirror so it tracks the merged public state:
+
+```bash
+git fetch public
+git merge --ff-only public/main   # or merge --no-ff if it cannot fast-forward
+git push fork fork-main:main
+```
+
+## Standard release assets
+
+Upload both assets when creating a public data release (only after the PR is merged):
 
 ```text
 trace/syfi_coding_trace.jsonl.gz
@@ -43,149 +235,19 @@ gzip -t trace/syfi_coding_trace.jsonl.gz
 sha256sum trace/syfi_coding_trace.jsonl.gz trace/syfi_coding_trace.duckdb
 ```
 
-## Public PR Export Workflow
-
-1. Inspect the worktree and remotes:
-
-```bash
-git status --short --branch
-git remote -v
-```
-
-2. Add the public remote if missing:
-
-```bash
-git remote add public https://github.com/uw-syfi/TraceLab.git
-```
-
-3. Build an export directory instead of switching the dirty internal worktree:
-
-```bash
-EXPORT=/tmp/tracelab-public-export
-rm -rf "$EXPORT"
-mkdir -p "$EXPORT"
-git archive HEAD | tar -x -C "$EXPORT"
-```
-
-4. Overlay intentional uncommitted source/doc changes. Prefer explicit paths from
-`git status --short`; do not copy ignored trace data or generated outputs.
-
-5. Stage the export in a clean clone of the public repo on a temporary review branch:
-
-```bash
-PUBLIC_WORK=/tmp/tracelab-public-pr
-REVIEW_BRANCH=review-public-export
-rm -rf "$PUBLIC_WORK"
-git clone https://github.com/uw-syfi/TraceLab.git "$PUBLIC_WORK"
-cd "$PUBLIC_WORK"
-git switch -c "$REVIEW_BRANCH" origin/main
-find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-cp -a "$EXPORT"/. "$PUBLIC_WORK"/
-```
-
-6. Review the entire public diff before choosing the branch name, commit message, PR title, or
-PR body. This is mandatory. Do not summarize only the agent's own recent edits.
-
-Use at least:
-
-```bash
-git status --short
-git diff --name-status origin/main...HEAD
-git diff --stat origin/main...HEAD
-```
-
-Then inspect changes by area. Read enough changed files to understand the actual release scope:
-
-- top-level docs and config (`README.md`, `artifacts/README.md`, `config/services.json`, `.gitignore`)
-- new/changed artifact READMEs and scripts, grouped by category
-- renamed or moved tools, especially `replay/` and web/AI infrastructure
-- web UI changes under `web/app/src` and helper scripts under `web/tools`
-- deleted files, renames, and generated-file removals
-
-Run public-safety checks before pushing:
-
-```bash
-find trace -maxdepth 2 -type f 2>/dev/null | sort
-find . -maxdepth 4 \( -name '*.duckdb' -o -name '*.jsonl.gz' -o -name '*.jsonl' \)
-rg -n '/m-coriander|coding_trace_refactor|serendipity-zk|coding-trace-collect|API_KEY=' . -g '!web/app/dist/**'
-git diff --check
-```
-
-Expected benign matches such as documentation mentioning environment variable names are okay, but
-internal absolute paths, private remotes, secrets, trace data, or generated runtime data must be
-removed or explicitly justified before continuing. If the diff is large, still read representative
-files from every changed category and note unreviewed risk in the PR body.
-
-7. Choose a descriptive branch/topic after reviewing all changes. Base it on the actual public diff,
-not on the fact that this is a snapshot. Do not put dates in the PR title or branch name. Prefer
-names like:
-
-```text
-refresh-artifacts-replay-ui
-refresh-web-analytics-docs
-release-trace-assets
-```
-
-Avoid generic names such as `public-snapshot` unless the diff is truly only a mechanical snapshot
-with no coherent product or artifact theme.
-
-Rename the temporary review branch to the descriptive topic before committing:
-
-```bash
-BRANCH=refresh-meaningful-topic
-git branch -m "$BRANCH"
-git status --short
-git add .
-git commit -m "Refresh artifact analyses, replay tooling, and detail UI"
-git push -u origin "$BRANCH"
-```
-
-8. Open a draft PR instead of pushing to `main`. The PR title and body must name the substantive
-changes. Include a short overview, concrete bullets grouped by area, and public-release safety
-checks. Do not use boilerplate-only titles such as "TraceLab public snapshot".
-
-```bash
-gh pr create \
-  --repo uw-syfi/TraceLab \
-  --base main \
-  --head "$BRANCH" \
-  --draft \
-  --title "Refresh artifact analyses, replay tooling, and detail UI" \
-  --body-file /tmp/tracelab-public-pr-body.md
-```
-
-Suggested PR body structure:
-
-```markdown
-## What this changes
-One paragraph describing the actual release theme.
-
-## Main updates
-- Artifact analyses: ...
-- Replay / AI tooling: ...
-- Web UI: ...
-- Docs / release workflow: ...
-
-## Public-release safety
-- No trace release data files are committed to Git.
-- `trace/` contains only expected public documentation.
-- Internal absolute paths, private remotes, and secrets were scanned.
-- Release assets will be uploaded only after review and merge.
-```
-
-9. Create a release only after the PR is reviewed and merged:
+Create the release:
 
 ```bash
 gh release create vYYYY-MM-DD-syfi-trace \
-  ../coding_trace_refactor/trace/syfi_coding_trace.jsonl.gz \
-  ../coding_trace_refactor/trace/syfi_coding_trace.duckdb \
+  trace/syfi_coding_trace.jsonl.gz \
+  trace/syfi_coding_trace.duckdb \
   --repo uw-syfi/TraceLab \
   --target main \
   --title "TraceLab public trace snapshot YYYY-MM-DD" \
   --notes "Public sanitized trace release. Assets include the compressed JSONL rows and a DuckDB database."
 ```
 
-If the release exists, use `gh release upload --clobber`.
+If the release already exists, use `gh release upload --clobber`.
 
 ## Verification
 
@@ -193,14 +255,15 @@ After drafting the PR:
 
 ```bash
 gh pr view --repo uw-syfi/TraceLab --web
-git ls-remote public refs/heads/main refs/heads/refresh-meaningful-topic
+gh pr view --repo uw-syfi/TraceLab --json mergeable,mergeStateStatus   # expect MERGEABLE / clean
+git ls-remote fork refs/heads/main
 ```
 
-After the PR is merged and a release is created:
+After merge and release:
 
 ```bash
 gh release view vYYYY-MM-DD-syfi-trace --repo uw-syfi/TraceLab
 ```
 
-Check that release download URLs in `README.md` point to `uw-syfi/TraceLab`, and that
-the public commit has no internal remote URLs except intentional historical references.
+Check that release download URLs in `README.md` point to `uw-syfi/TraceLab`, and that the public
+commit carries no internal remote URLs except intentional historical references.
