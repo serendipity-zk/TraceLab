@@ -17,7 +17,11 @@
     },
     "openrouter": {
       "base_url": "https://openrouter.ai/api/v1",
-      "model": "nex-agi/nex-n2-pro:free"
+      "model": "qwen/qwen3.6-35b-a3b",
+      "provider_routing": {
+        "order": ["atlas-cloud", "wandb"],
+        "allow_fallbacks": true
+      }
     }
   }
 }
