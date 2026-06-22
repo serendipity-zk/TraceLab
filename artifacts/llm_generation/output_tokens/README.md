@@ -75,14 +75,13 @@ as compressed text chunks. Unpack with `python artifacts/utils/png_sidecar.py ex
 
 ### output_tokens_distribution.png
 
-Read the curve together with `output_tokens_summary.csv`. The distribution is strongly
-**right-skewed**: most steps emit a modest number of tokens (the bulk sits well left of the p90
-tick), while a thin tail of long generations stretches toward the per-group `max`. The gap between
-`p50` and `p99` in the summary quantifies that spread — the median is a poor summary of cost on its
-own, because the upper-percentile steps dominate total generated tokens.
-
-When more than one provider is present, compare the curves rather than overlaying a single number:
-because Codex folds reasoning tokens into `output_tokens` while Claude does not, a heavier Codex tail
-can reflect reasoning rather than more visible output. The `<unknown-provider>` / `<unknown-model>`
-buckets, if they appear, flag steps with missing provenance and are worth checking before drawing
-cross-provider conclusions.
+The full per-step output distribution (the paper's `fig:output_tokens`): both providers pile up in
+the low hundreds of tokens — median 252 for Claude, 184 for Codex — and the curve is strongly
+**right-skewed**, with only a thin tail of long generations reaching the per-group `max`. Outputs
+this short are the expected consequence of the tool loop: a full response is cut into ~8 tool-call
+steps, so most steps emit just the next call's arguments rather than a long answer. Codex adds a
+distinctive second feature — a pronounced spike of very short (~40-token) generations — driven by its
+heavy use of `write_stdin` to wait on a running command or send `Ctrl+C` to interrupt one. Read the
+curves side by side rather than overlaying one number: Codex folds reasoning tokens into
+`output_tokens` while Claude does not, so a heavier Codex tail can reflect reasoning rather than more
+visible output, and the `<unknown-*>` buckets (if present) flag steps with missing provenance.

@@ -349,8 +349,8 @@ export function buildCompare(s: Summary): CompareData {
   };
 
   const sessionContext: CompareGroup = {
-    name: 'Session context',
-    note: 'context growth across sessions and agent steps',
+    name: 'Session',
+    note: 'context growth, human waits, and agent-step workflow shape',
     rows: [
       sub('Step-level context growth'),
       prof('Total context increase', (p) => fmtTokenMass(p.tokens.input.total_context_increase_tokens)),
@@ -371,18 +371,11 @@ export function buildCompare(s: Summary): CompareData {
       sub('Growth / reductions'),
       prof('User-initiated growth share', (p) => pct1(p.tokens.input.total_input_growth_when_started_with_user_message.positive_growth_share)),
       prof('User-initiated reduction share', (p) => pct1(p.tokens.input.total_input_growth_when_started_with_user_message.negative_growth_share)),
-      prof('User-initiated major compaction share', (p) => pct1(p.tokens.input.total_input_growth_when_started_with_user_message.major_compact_share)),
+      prof('User-initiated major compaction share', (p) => pct1(p.tokens.input.total_input_growth_when_started_with_user_message.major_reduction_share)),
       prof('Tool-triggered growth share', (p) => pct1(p.tokens.input.total_input_growth_when_started_with_tool_result.positive_growth_share)),
       prof('Tool-triggered reduction share', (p) => pct1(p.tokens.input.total_input_growth_when_started_with_tool_result.negative_growth_share)),
-      prof('Tool-triggered major compaction share', (p) => pct1(p.tokens.input.total_input_growth_when_started_with_tool_result.major_compact_share)),
-    ],
-  };
-
-  const humanInLoop: CompareGroup = {
-    name: 'Human in the loop',
-    note: 'human waits before the next model response',
-    rows: [
-      sub('Timing'),
+      prof('Tool-triggered major compaction share', (p) => pct1(p.tokens.input.total_input_growth_when_started_with_tool_result.major_reduction_share)),
+      sub('Human waits'),
       prof('Total human wait time', (p) => fmtHours(p.generation_timing.total_waiting_for_human_input_seconds)),
       prof('Human wait avg / p50 / p90', (p) =>
         fmtSecondsTriplet(
@@ -397,7 +390,7 @@ export function buildCompare(s: Summary): CompareData {
   return {
     claudeHead: head('Claude', c, total),
     codexHead: head('Codex', x, total),
-    groups: [traceFacts, llmGeneration, toolCalls, prefixCache, sessionContext, humanInLoop],
+    groups: [traceFacts, sessionContext, llmGeneration, toolCalls, prefixCache],
     claudeModels: c ? modelSegments(c.rounds_by_model) : [],
     codexModels: x ? modelSegments(x.rounds_by_model) : [],
   };

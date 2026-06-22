@@ -42,7 +42,7 @@ uv run python artifacts/llm_generation/timing_feature_ambiguity/analyze.py
 uv run python artifacts/llm_generation/timing_feature_ambiguity/build_summary.py
 ```
 
-## Outputs (written here)
+## Outputs
 
 - `timing_feature_ambiguity.json` / `.md`, `timing_feature_ambiguity_top.csv`
 - `timing_irreducible_error.json` / `.md`, `timing_irreducible_error_fit_comparison.csv`

@@ -15,7 +15,7 @@ between-request quantity** and so only exists at the session level:
   `Other (overhead)`. No human term: human wait sits *between* requests, never inside one.
 - **Per step** — `LLM generation` vs `Tool execution` only (one round has no human term, no e2e).
 
-## Definitions (reused so the numbers reconcile)
+## Definitions
 
 - **LLM generation** (per step) — observable generation span, latest qualifying input event →
   last model-output event; identical to `llm_generation/generation_time_cdf` and the per-round
@@ -46,6 +46,8 @@ uv run python artifacts/session/session_timing_distribution/analyze.py          
 
 - `session_timing_distribution.tex` — the merged single-column timing table (Avg / P50 / P90 / P99
   + % time) for the paper.
+- `session_timing_distribution.md` — GFM Markdown mirror of the table, rendered on the web detail page.
+- `headline.json` — the few headline numbers for the Overview gallery card.
 - stdout — merged + per-provider (Claude / Codex) per-category percentiles and time shares.
 
 ## Headline numbers (public trace)
@@ -63,3 +65,17 @@ The session human share is consistent across providers under the provider-agnost
 spilled ~13% into an "Other" residual, which is why that residual row was removed.
 
 No figures.
+
+## SyFI result analysis
+
+### session_timing_distribution.md
+
+A coding session is mostly idle, waiting on the human (the paper's `tab:timing_distribution`).
+**Human thinking is 92.3%** of session wall-clock, dwarfing LLM generation (3.3%) and tool execution
+(4.8%); most sessions are short — the median is a single request with no inter-request gap — but a
+heavy tail of sessions left open for hours or days (session p99 elapsed ≈ 206h) accumulates most of
+that idle. Capping each gap at one hour (the cache-relevant budget) drops the human share to 64.3%,
+with generation and tool rising to 14.5% and 21.2%. Inside an individual request the human term
+vanishes and **tool execution leads generation, 59.8% vs 41.0%** of the 2,783h of total response
+time; an average request runs 4.3 min end to end (median 38s, p90 6.4 min), and per active step the
+model spends ~11.5s generating and ~16.8s in tools.

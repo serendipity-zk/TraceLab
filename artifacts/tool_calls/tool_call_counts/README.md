@@ -60,7 +60,7 @@ uv run python artifacts/tool_calls/tool_call_counts/plot.py --db /tmp/trace.duck
 Useful flags: `--top-tools` (max bars per panel, default 30), `--min-tool-calls-for-plot`
 (rare-tool collapse threshold, default 20).
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `tool_call_counts.png` — provider-paneled tool call counts with error overlay.
 - `tool_call_counts_by_provider.csv` — full per-tool counts: `calls`, `error_calls`, `error_rate`,
@@ -73,14 +73,12 @@ The PNG is self-contained — it embeds this README, the CSV, and the plotting c
 
 ### tool_call_counts.png
 
-A small number of tools account for the overwhelming majority of calls on both providers — the
-clipped leader bar (annotated with its true count) towers over everything else, which is exactly
-why the axis is clipped at the second-largest bar. Reading the panels:
-
-- The shape is **heavy-headed**: file/shell primitives dominate, and the long tail of
-  specialized or MCP tools is comparatively thin — visible as the collapsed `Other` bar.
-- The **error overlay** (red) is where to look for reliability differences: tools with a visible
-  red segment are the ones whose calls fail often enough to matter at this volume. Per-tool
-  `error_rate` is in the CSV for exact figures.
-- Comparing the two provider panels shows how Claude Code and Codex differ in *tool vocabulary* —
-  which named tools each exposes and leans on — independent of how many sessions each contributed.
+Tool usage is steeply concentrated: command execution leads both providers, trailed by file
+operations like Read and Edit (the paper's `fig:tool_call_counts`). Claude leans on `Bash`
+(the clipped leader, annotated with its true 67k calls), then `Read` (32k) and `Edit` (18k);
+Codex leans on `exec_command` (187k), then `write_stdin` (63k) and `apply_patch` (24k). The
+concentration is extreme — across the 54 distinct Claude tools and 31 Codex tools, the top three
+account for over 80% of Claude's calls and ~95% of Codex's. Everything past the head is a thin
+long tail of specialized and MCP tools, collapsed into the `Other` bar. The red error overlay
+flags reliability outliers — Claude's `ExitPlanMode` and `AskUserQuestion` fail far more often
+than the high-volume primitives — with exact per-tool `error_rate` in the CSV.

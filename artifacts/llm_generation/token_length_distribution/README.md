@@ -39,9 +39,26 @@ uv run python artifacts/llm_generation/token_length_distribution/analyze.py -i t
 uv run python artifacts/llm_generation/token_length_distribution/analyze.py --db /tmp/trace.duckdb -o /tmp/out
 ```
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `token_length_distribution.tex` — the combined per-provider table; a copy with a provenance
   header lives at `figure-tex/tab_token_length_distribution.tex` in the paper repo.
+- `token_length_distribution.md` — GFM Markdown mirror of the table, rendered on the web detail page.
+- `headline.json` — the few headline numbers for the Overview gallery card.
 
 The per-provider stats are also printed to stdout.
+
+## SyFI result analysis
+
+### token_length_distribution.md
+
+This is the single table feeding `tab:token_length_distribution`, and it makes the central asymmetry
+of the workload concrete: per step, inputs are huge and outputs are tiny. On the **prefix** side a
+median step replays 126k cached tokens for Claude and 116k for Codex — and because Claude's context
+window is longer, its prefix stretches to a p99 of 918k while Codex saturates near 231k. The
+**append** side is two orders of magnitude smaller, a median of just 857 fresh tokens for Claude and
+886 for Codex, the only slice a step is actually charged for. **Output** is smaller still: a median
+of 252 tokens for Claude and 184 for Codex, with the p90 under 1.7k and even the p99 staying in the
+low thousands. That outputs run so short is counterintuitive but follows from the tool loop — a full
+response is split across ~8 tool-call steps, so each individual generation is brief and often just
+emits the next tool call's arguments.

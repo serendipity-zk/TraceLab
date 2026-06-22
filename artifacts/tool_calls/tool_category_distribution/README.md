@@ -60,7 +60,7 @@ uv run python artifacts/tool_calls/tool_category_distribution/analyze.py -i trac
 uv run python artifacts/tool_calls/tool_category_distribution/analyze.py --db /tmp/trace.duckdb -o /tmp/out
 ```
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `tool_category_count_ring.png` — donut of call counts across the 6 coarse categories.
 - `tool_category_latency_bar.png` — summed effective latency (hours) per category, with average.
@@ -83,32 +83,42 @@ The PNGs are self-contained — each embeds this README, the CSVs, and the plott
 
 ### tool_category_count_ring.png
 
-The donut shows how the agents' tool calls split across the six coarse categories. The ordering is
-**heavy-headed**: execute-command and file read/search/write dominate the count, while agent/task
-and web/remote/lookup are comparatively thin slices. The center label is the total call count and
-each slice is annotated with its percentage share; the legend carries exact counts and shares so
-the long tail (small slices) stays legible.
+The donut shows how the agents' tool calls split across the six coarse categories, and the ordering
+is sharply heavy-headed. Execute-command alone is ~76% of all calls, file write/edit ~11% and file
+read/search ~9%; agent/task (~1.2%) and web/remote/lookup (~1.0%) are thin slivers, with everything
+else folded into `Other` (~2.1%). So once provider-specific tool names are normalized into shared
+categories, the agents' work is overwhelmingly shell execution plus file I/O. The center label is
+the total call count and each slice is annotated with its share; the legend carries exact counts so
+the small slices stay legible.
 
 ### tool_category_latency_bar.png
 
-Re-ranking the same categories by **summed effective latency** (hours) instead of call count tells
-a different story: the category that consumes the most wall-time is not necessarily the most
-*called* one, because per-call cost varies widely (each bar is annotated with its average seconds
-per call). This is the count-vs-cost gap — cheap high-frequency primitives vs. expensive
-lower-frequency calls.
+Re-ranking the same categories by **summed effective latency** (hours) tells a different story than
+the count ring, because per-call cost varies by more than two orders of magnitude (each bar is
+annotated with average seconds per call). Execute-command still leads at ~1143h, but its ~18s
+average is dwarfed per-call by agent/task (~63s avg, 90.9h total) and web/remote/lookup (~24s avg,
+27.0h), and the `Other` bucket punches far above its 2% call share at ~307h (~127s avg). File
+read/search, despite being the third-most-called category, costs only ~12.6h at ~1.2s per call.
+That is the count-vs-cost gap: cheap high-frequency primitives versus expensive, rarer calls that
+block on real work or the user.
 
 ### tool_category_dashboard.png
 
-The presentation dashboard combines three views of the 7-bucket map: a call-count donut (left), a
-ranked category table (middle), and a log-scale **latency-quantile strip** (right, p25/p50/p90/p99
-per category). The quantile strip exposes the within-category spread — a category can have a modest
-median yet a p99 orders of magnitude larger, which is exactly the long-tail behavior the next
-figure quantifies in aggregate.
+The presentation dashboard combines three views of the 7-bucket map (which additionally splits out
+`Planning`): a call-count donut (left), a ranked category table (middle), and a log-scale
+**latency-quantile strip** (right, p25/p50/p90/p99 per category). The strip exposes the
+within-category spread that a single average hides — shell/command sits at a p50 of ~0.85s but a
+p99 of ~235s, planning jumps from a p50 of ~0.07s to a p99 of ~378s, and agent/task climbs from a
+p50 of ~0.18s to a p99 of ~600s. A category can thus have a modest median yet a p99 three to four
+orders of magnitude larger, which is exactly the long-tail behavior the next figure quantifies in
+aggregate.
 
 ### tool_latency_long_tail_imbalance.png
 
-This is the headline imbalance: the top bar is each latency bin's **share of calls**, the bottom bar
-its **share of total latency**. The sub-second bin holds the large majority of calls but a small
-sliver of total latency, while the `>1m` bin is a rare fraction of calls yet dominates summed
-latency — i.e. a handful of slow calls account for most of the time spent in tools. Exact figures
-are in `tool_latency_long_tail_imbalance.csv`.
+This is the headline imbalance: the top bar is each latency bin's **share of calls**, the bottom
+its **share of total latency**, and the two invert. The `<1s` bin holds ~61% of calls but only
+~0.5% of total latency, and `1–10s` adds another ~27% of calls for ~4% of latency. At the other
+end the `>1m` bin is just ~4% of calls yet ~85% of all tool latency, with `10s–1m` (~8% of calls)
+contributing the remaining ~11%. So a handful of slow calls account for the overwhelming majority
+of time spent in tools — the same long-tail signature seen per-provider, now aggregated across
+categories. Exact figures are in `tool_latency_long_tail_imbalance.csv`.

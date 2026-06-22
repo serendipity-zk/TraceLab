@@ -71,7 +71,7 @@ uv run python artifacts/prefix_cache/cache_hit_ratio/analyze.py --db /tmp/trace.
 uv run python artifacts/prefix_cache/cache_hit_ratio/analyze.py --no-plots
 ```
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `cache_hit_ratio_histogram.png` — step-weighted hit-ratio histogram, paneled scope × trigger.
 - `cache_hit_ratio_append_weighted_histogram.png` — the same panels weighted by append tokens.
@@ -83,6 +83,7 @@ uv run python artifacts/prefix_cache/cache_hit_ratio/analyze.py --no-plots
   `<10% / 10-40% / 40-80% / 80%+` buckets.
 - `cache_hit_ratio_token_weighted.csv` — token-weighted hit-rate inputs for the paper table.
 - `prefix_cache_hit_rate_table.tex` — LaTeX table body for the paper.
+- `cache_hit_ratio_table.md` — GFM Markdown mirror of that table, rendered on the web detail page.
 
 The PNGs are self-contained — they embed this README, the CSVs, and the plotting code (`analyze.py`
 + shared `artifacts/utils/` modules). Unpack with
@@ -95,10 +96,11 @@ The PNGs are self-contained — they embed this README, the CSVs, and the plotti
 A `scope × trigger` grid of step-weighted hit-ratio histograms (bars colored red/amber/blue by
 hit-ratio band). The dominant signal is a tall bar in the top `(.99,.995]`/`(.995,1]` bins: the
 **vast majority of steps are near-perfect cache hits**, so coding agents pay for only a thin
-freshly-appended slice each step. The split by trigger is the interesting part: `tool_result`-started
-steps cluster even harder at the high end (the prior context is reused almost verbatim), while
-`user`-started steps carry a visible low-ratio tail — a fresh user message can invalidate more of
-the prefix. Compare the per-provider rows against `merged` to see whether one provider drives the tail.
+freshly-appended slice each step. The split by trigger is the headline of `tab:prefix_cache_hit_rate`:
+`tool_result`-started steps cluster hard at the high end (token-weighted ~97.5% hit, the prior context
+resumes almost verbatim), while `user`-started steps carry a visible low-ratio tail (~84% hit) — a
+fresh user message after a long human pause can invalidate more of the prefix. Compare the
+per-provider rows against `merged` to see whether one provider drives the tail.
 
 ### cache_hit_ratio_append_weighted_histogram.png
 
@@ -108,3 +110,13 @@ The shape shifts markedly versus the step-weighted view: the high-hit bins shrin
 bins grow, because the rare low-ratio steps are exactly the ones appending large amounts of new
 text. Read this panel to find where new-token spend concentrates — `cache_hit_ratio_summary.csv`'s
 `append_hit_*` columns give the exact mass shares per band.
+
+### cache_hit_ratio_table.md
+
+The token-weighted hit rate by step type (the paper's `tab:prefix_cache_hit_rate`). Caching is
+uniformly high overall: both providers serve about **96%** of prompt tokens from the prefix cache
+(Claude 95.8%, Codex 95.7%). The interesting split is by trigger — **user-initiated** steps hit
+much lower (86.9% Claude, 78.2% Codex) because human think time can stretch the idle gap past the
+eviction window, whereas **tool-result** steps stay near-perfect (97.9% / 97.2%) since they resume
+almost immediately. So the misses that remain are concentrated where the agent waits on a person,
+not on a tool.

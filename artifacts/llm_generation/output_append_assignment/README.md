@@ -1,8 +1,9 @@
 # output_append_assignment
 
-**Does an agent step's output token count predict the *next* step's newly appended tokens (i.e. is the
-prior response what reappears as new append), and how does prior output relate to the next step's
-cached-prefix gain — does the previous response land on the prefix side or the append side?**
+**A prior step's output must reappear in the next step's prompt — but where? Folded into the cached
+prefix (*output-cached*), or dropped from the cache and re-sent as freshly billed append
+(*output-resend*)? This experiment lays out the two accounting schemes, then measures which one each
+model actually uses.**
 
 ## Experiment overview
 
@@ -112,42 +113,57 @@ Each PNG is self-contained — it embeds this README, the summary CSVs, and the 
 
 ## SyFI result analysis
 
-### output_vs_next_append_scatter_min{N}.png
+### output_attribution_schematic.png
 
-One scatter panel per scenario on base-2 log axes: x = previous step's output tokens, y = next
-step's newly appended tokens, with the `y = prev.output` diagonal and a per-panel
-`corr(log)` and median `append − output`.
+A prior step's output can enter the next step's prompt two ways (the paper's `fig:output_attribution`).
+Under **(a) output-cached**, the serving system keeps the KV it produced during decode, so the prior
+step's whole composition — prefix, append, and output (`10 + 2 + 4 = 16` units) — folds into the next
+step's cached prefix, which then adds only its own fresh append and output. Under **(b) output-resend**,
+only the prior prefix and append are cached (`10 + 2 = 12`); the prior output is dropped from the cache
+and re-sent as part of the next step's billed append (`4 + 1 = 5`), so the tell is that the re-sent
+output makes the next append longer than the prior output. We separate the two cases by their
+invariants — output-cached makes the next **prefix gain** track the prior output, output-resend makes
+the next **append** absorb it. Applied per model on prior outputs ≥2k tokens (the paper's
+`fig:model_merged_output_attribution`), **Claude and gpt-5.5 come out output-resend** (≈98–99%
+append-side, prefix-close near zero) while **gpt-5.4 is output-cached** (~82% prefix-close, only ~13%
+append-side). The likely driver is KV-cache pool management in PD-disaggregated serving: output-cached
+must transfer decode-produced KV back to shared storage, whereas output-resend lets decode stay
+read-only and simply re-prefills the prior output. The scatter and ranked panels below are that test,
+split by scenario and by the ≥2k / ≥4k output threshold.
 
-- Points hugging the diagonal are the replay signal — the previous response reappears nearly
-  one-for-one in the next step's append. Scenarios where the cloud sits **on or above** the line are
-  append-side; clouds well below it mean the prior output did not land in append.
-- The threshold `N` (2000 vs 4000) trims small-output pairs; the larger threshold sharpens the
-  high-output regime where replay is easiest to see.
-- The panel is a per-scenario subsample (up to `--max-points-per-scenario`), so it conveys joint
-  structure, not exact density — read the summary CSV for the per-scenario percentages and decision.
+### output_vs_next_append_scatter_min2000.png
 
-### ranked_output_vs_next_append_min{N}.png
+One scatter panel per scenario (prior output ≥ 2k) on base-2 log axes: x = previous step's output
+tokens, y = next step's newly appended tokens, with the `y = prev.output` diagonal and a per-panel
+`corr(log)` and median `append − output`. Points hugging the diagonal are the resend signal — the
+previous response reappears nearly one-for-one in the next append. The Claude and gpt-5.5 panels sit
+right on the line (median `append − output` near +140 and +410 tokens), the resend fingerprint;
+gpt-5.4 sits well below it (median append far short of its output), consistent with that output
+having been cached into the prefix instead. The panel is a per-scenario subsample, so read it for
+shape and confirm magnitudes in the summary CSV.
 
-The same data ranked: x = percentile rank by previous output, the black curve is the sorted prev-output
-sweep, scattered points are the next append at each rank. It separates "do append and output rise
-together" (curve and cloud track) from level-shift gaps, and is robust to the heavy-tailed token
-distribution that compresses the raw scatter.
+### ranked_output_vs_next_append_min2000.png
 
-### output_vs_prefix_gain_scatter_min{N}.png
+The same ≥2k-output data ranked: x = percentile rank by previous output, the black curve is the
+sorted prev-output sweep, and scattered points are the next append at each rank. It separates "append
+and output rise together" (curve and cloud track — the resend models) from a level-shift gap (the
+cloud sits below the sweep — the cached models), and is robust to the heavy-tailed token distribution
+that compresses the raw scatter.
+
+### output_vs_prefix_gain_scatter_min2000.png
 
 x = previous output, y = next step's **prefix gain** (`current.prefix_tokens −
-previous.input_tokens_total`, non-positive gains drawn at 0), with the `y = prev.output` diagonal and
-a median `prefix_gain − output`.
+previous.input_tokens_total`, non-positive gains drawn at 0), with the `y = prev.output` diagonal.
+Points on the diagonal are the **cached** side — the prior output was absorbed into the next step's
+cached prefix rather than re-charged as append. This is where gpt-5.4 separates out: its prefix gain
+tracks the prior output (median prefix gain ~2.6k against ~3.0k output), the output-cached signature,
+while Claude and gpt-5.5 pin their gain at 0, meaning the prior output did not grow the cached prefix
+and instead landed in append.
 
-- Points on the diagonal are the **prefix side**: the prior output was absorbed into the next step's
-  cached prefix rather than re-charged as append. A scenario that is on-diagonal here *and*
-  below-diagonal in the append scatter is `prefix_side` in the CSV.
-- Gains pinned at 0 (or below the line) mean the prior output did not grow the cached prefix — the
-  append side, or a cache miss.
+### ranked_output_vs_prefix_gain_min2000.png
 
-### ranked_output_vs_prefix_gain_min{N}.png
-
-The ranked counterpart for prefix gain: x = percentile rank by previous output, black curve = sorted
-prev-output sweep, scatter = next prefix gain at each rank. Reads like the append rank grid but for the
-cached-prefix side, making it easy to see at which output magnitudes the prior response starts landing on
-the prefix.
+The ranked counterpart for prefix gain (≥2k output): x = percentile rank by previous output, black
+curve = sorted prev-output sweep, scatter = next prefix gain at each rank. It reads like the append
+rank grid but for the cached-prefix side, making it easy to see at which output magnitudes the prior
+response starts landing on the prefix — pronounced for gpt-5.4 (cloud tracks the sweep) and absent
+for the resend models (cloud pinned low).

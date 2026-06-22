@@ -22,6 +22,8 @@ uv run python artifacts/llm_generation/append_by_prefix_bin/analyze.py        # 
 ## Outputs
 
 - `append_by_prefix_bin.tex` — the Claude/Codex table for the paper (empty bins render as `--`).
+- `append_by_prefix_bin.md` — GFM Markdown mirror of the table, rendered on the web detail page.
+- `headline.json` — the few headline numbers for the Overview gallery card.
 - stdout — the same per-provider breakdown in plain text.
 
 ## Headline numbers (public trace)
@@ -35,3 +37,18 @@ uv run python artifacts/llm_generation/append_by_prefix_bin/analyze.py        # 
   caps near its 256k context (only 6 steps exceed it).
 
 No figures.
+
+## SyFI result analysis
+
+### append_by_prefix_bin.md
+
+The table (`tab:append_by_prefix`) quantifies the inverse relationship behind the prefix-vs-append
+scatter: the more a step has already cached, the less it appends. In the smallest prefix bin (`<1k`
+— a cache miss or the very first request, where almost nothing is cached) the median append is huge,
+78k tokens for Claude and 124k for Codex, because nearly the whole prompt has to be sent as new. Once
+the prefix grows past 32k the median append collapses to well under 1k (Claude 951→762, Codex
+954→771 across the `32-64k`..`>256k` bins), as those steps only stack an incremental tool result or
+user turn onto an already-cached context. The bins also expose provider structure: Claude's prefix
+jumps almost straight to large values — its `1-2k` bin is empty and `2-4k` holds just 2 steps,
+reflecting a large system prompt — while Codex effectively caps near its 256k context window, with
+only 6 steps exceeding it.

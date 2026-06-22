@@ -78,7 +78,7 @@ uv run python artifacts/llm_generation/prefix_append_distribution/plot.py --db /
 Useful flags: `--group-by` (`provider` / `model` / `provider_model`), `--max-groups` (max plotted
 groups, default 8), `--pair-sample-size` (scatter subsample, default 80000).
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `prefix_append_distribution.png` — prefix vs append token histograms.
 - `prefix_append_cdf.png` — CDFs of prefix / append token length.
@@ -94,27 +94,40 @@ The PNGs are self-contained — they embed this README, the CSVs, and the plotti
 
 ### prefix_append_distribution.png
 
-Two histograms side by side: the **prefix** (cached) distribution sits far to the right — most
-steps reuse a large cached prefix — while the **append** distribution is centered much lower, since
-each step only pays for a modest freshly-appended slice. The legend's `p50`/`p90` quantify the gap;
-both are exact over all steps now (no `sampled` note appears).
+The two histograms sit roughly **two orders of magnitude apart**. The **prefix** (cached) curve
+piles up far to the right — a median step replays about 126k cached tokens for Claude and 116k for
+Codex — while the **append** curve is centered down in the low hundreds (median ~857 tokens for
+Claude, ~886 for Codex), the only slice a step is freshly charged for. The legend's `p50`/`p90`
+quantify the gap, exact over all steps. The takeaway is the central fact of a coding agent's input:
+each step overwhelmingly *replays* accumulated context and pays for only a thin new margin on top.
 
 ### prefix_append_cdf.png
 
-The CDFs make the median and tail crossover explicit: the prefix curve rises late (large reused
-prefixes dominate), while the append curve saturates early (most appends are small). Read the
-x-position where each curve hits 50%/90% to compare typical vs tail input cost per provider.
+The CDFs make the separation explicit. The prefix curve rises late and keeps climbing into the
+hundreds-of-thousands range — Claude's longer context window stretches its prefix tail to a p99 near
+918k tokens, while Codex saturates closer to 231k — whereas the append curve saturates early because
+most appends are tiny. Read where each curve crosses 50%/90% to compare a provider's typical input
+cost against its tail, and note that the two providers diverge mainly in the prefix tail, not the
+append body.
 
 ### prefix_vs_append_sample.png
 
-The scatter shows the joint shape: a large reused prefix does **not** imply a large append — points
-spread widely in append for any given prefix band. This is a deterministic visual subsample (up to
-`--pair-sample-size` points), so it conveys structure, not exact density; use the CSV/CDF for
-quantitative reads.
+The scatter exposes the joint structure behind the two marginals (this is the paper's
+`fig:prefill_append_relationship`). Most steps cluster at a prefix of **32k–128k** with an append of
+**256–8k**, but two regimes separate out. A small-prefix group (below ~16k) carries comparatively
+**large** appends — these are prefix-cache misses and cold initial prefills, where little is cached
+so most of the prompt is paid for as new. The large-prefix group appends **little** — ordinary
+in-session growth, where a step stacks just one tool result or user turn onto an already-cached
+context. So a large reused prefix does *not* imply a large append; the two effectively trade off.
+This is a deterministic visual subsample (up to `--pair-sample-size` points), so read it for shape,
+not exact density — use the CSV/CDF for quantitative reads.
 
 ### append_tokens_weighted_bins.png
 
-Two stacked bars per provider — step-share on top, append-token-mass-share below — over the same
-append-length buckets. The arrows pointing down from the count bar to the mass bar show the headline
-result: **most steps are small, but most appended tokens come from the rare large steps.** The
-small buckets dominate by count yet the large buckets dominate the token mass.
+Two stacked bars per provider — step share on top, append-token-mass share below — over the same
+append-length buckets (the paper's `fig:prefill_weighted_bar`). The two bars invert each other: over
+**90% of steps append fewer than 1k tokens**, yet more than **70% of all appended tokens** come from
+the rare steps that append 10k or more. The arrows from the count bar down to the mass bar make the
+point — even though almost every step is tiny by count, the prefill *workload* is dominated by a
+small tail of large-append steps. That tail is where new-token spend, and the cost of cache misses,
+actually concentrates.

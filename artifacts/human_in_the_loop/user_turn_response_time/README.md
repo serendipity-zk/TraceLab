@@ -85,7 +85,7 @@ uv run python artifacts/human_in_the_loop/user_turn_response_time/analyze.py -i 
 uv run python artifacts/human_in_the_loop/user_turn_response_time/analyze.py --db /tmp/trace.duckdb -o /tmp/out
 ```
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `user_turn_response_time_summary.csv` — per-group (`all` + each provider) `count`, `mean_seconds`,
   `p25/p50/p90/p99_seconds`, and `max_seconds` over the full request response-time lists.

@@ -33,9 +33,9 @@ export function pct(ratio: number): number {
   return Math.round(ratio * 100);
 }
 
-/** One-decimal percent, e.g. 0.9611 -> "96.1%". */
+/** One-decimal percent, e.g. 0.9611 -> "96.1%". Non-finite (missing/NaN) renders as "—". */
 export function pct1(ratio: number): string {
-  return `${(ratio * 100).toFixed(1)}%`;
+  return Number.isFinite(ratio) ? `${(ratio * 100).toFixed(1)}%` : '—';
 }
 
 /** ISO range -> "Sep 23 2025 — Jun 2 2026". */

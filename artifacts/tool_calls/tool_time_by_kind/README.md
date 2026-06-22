@@ -81,15 +81,14 @@ The PNG is self-contained — it embeds this README, the CSV, and the plotting c
 
 ### tool_total_time_by_kind.png
 
-Tool-execution time is dominated by a handful of long-running tool kinds rather than spread evenly
-across the tool vocabulary. Reading the panels:
-
-- The ranking is by **summed** latency, so a tool can top the chart either by being called very
-  often (high `n`) or by being individually slow (high `avg_latency_ms` in the CSV) — the `n=`
-  annotation separates those two regimes at a glance.
-- Shell/agent and plan/question tools (which block on real work or on the user) carry far more
-  aggregate time than fast file primitives, even when the latter are called more frequently.
-- Because latency is **additive over parallel calls**, these totals are attributed work, not
-  wall-clock session time; treat them as "where tool effort accumulates," not elapsed duration.
-- The per-tool CSV (`latency_share`, `avg_latency_ms`, `missing_latency_calls`) gives the exact
-  figures behind each bar, including the long tail collapsed into `Other` in the plot.
+Aggregate tool-execution time is dominated by a handful of tool kinds rather than spread across the
+vocabulary. The ranking is by **summed** latency (with `n=` call counts annotated), which separates
+two routes to the top: being called constantly versus being individually slow. Claude's `Bash`
+leads everything at ~771h over 67k calls (~46% of all tool time) — high volume *and* a long tail —
+followed by Codex's `write_stdin` at ~317h. The third bar exposes the other regime: Claude's
+`AskUserQuestion` reaches ~243h on only 784 calls, because each one blocks waiting on the human
+(avg ~19 min/call); `Agent` (~55h) and `ExitPlanMode` (~51h) are similar slow-but-rare blockers. By
+contrast Codex's `exec_command`, the single most-called tool at 187k calls, totals only ~51h
+because each call is cheap. Because latency is additive over parallel calls these are attributed
+work, not wall-clock session time; the CSV (`latency_share`, `avg_latency_ms`) has the exact
+figures, including the tail collapsed into `Other`.

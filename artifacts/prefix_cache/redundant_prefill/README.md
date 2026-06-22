@@ -63,20 +63,26 @@ uv run python artifacts/prefix_cache/redundant_prefill/analyze.py
 uv run python artifacts/prefix_cache/redundant_prefill/analyze.py --db /tmp/trace.duckdb -o /tmp/out
 ```
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `redundant_prefill_summary.csv` — per `(scope, trigger)`: events, total append, total context
   growth, total prior output, total fresh, and fresh % of append.
 - `redundant_prefill_table.tex` — the paper table (`tab:redundant_prefill`), copied into the paper's
   `figure-tex/`.
+- `redundant_prefill_table.md` — GFM Markdown mirror of the table, rendered on the web detail page.
+- `headline.json` — the few headline numbers for the Overview gallery card.
 
 ## SyFI result analysis
 
-Fresh tokens are a small slice of all prefill: only **~19%** of appended tokens are truly new
-(`merged / all`), so ~81% of prefill is, in principle, cache-serviceable — the gap to optimal.
-The split is sharply trigger-dependent: **user-initiated** steps are almost entirely
-cache-serviceable (fresh is only ~1.7% Claude / ~4.5% Codex of their append — these steps re-send a
-large window for a short new prompt), while **tool-result** steps carry the bulk of the fresh
-content (~27% Claude / ~41% Codex). Codex runs hotter on fresh fraction than Claude across the
-board, consistent with shorter resent windows and heavier tool output. The fresh % is the ceiling
-on prefix-cache hit rate — compare it against the measured hit rates in `cache_hit_ratio`.
+### redundant_prefill_table.md
+
+Fresh tokens are a small slice of all prefill (the paper's `tab:redundant_prefill`): only **19.0%**
+of appended tokens are genuinely new (12.3% Claude, 25.8% Codex), so the remaining ~81% is in
+principle cache-serviceable — the gap to optimal. Inverting the fresh fraction gives the **prefill
+amplification factor**, how many times more tokens are prefilled than an eviction-free perfect cache
+would need: **5.3x overall** (8.1x Claude, 3.9x Codex). The split is sharply trigger-dependent:
+**user-initiated** steps are almost entirely re-sent context (fresh is just 1.7% Claude / 4.5% Codex
+of their append — a large window resent for a short new prompt), while **tool-result** steps carry
+the bulk of the genuinely new content (27.1% / 40.5%). Codex runs hotter on fresh fraction than
+Claude throughout, consistent with shorter resent windows and heavier tool output. The fresh % is
+the ceiling on prefix-cache hit rate — compare it against the measured rates in `cache_hit_ratio`.

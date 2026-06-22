@@ -12,7 +12,7 @@ table reports the **cost** as avg / p50 / p90 / p99 plus the category's share of
 - **Output tokens** — `output_tokens` (reasoning included), billed at the output rate.
 - **Total** — the sum of the three.
 
-## Definitions (reused so the numbers reconcile)
+## Definitions
 
 - **Cost** uses the single-source price table `artifacts/utils/pricing.json` via
   `web_analytics/pricing.py` (`price_for` → per-model exact/family resolve; `round_cost` → append
@@ -34,6 +34,8 @@ uv run python artifacts/session/session_cost_distribution/analyze.py            
 
 - `session_cost_distribution.tex` — the merged single-column cost table (Avg / P50 / P90 / P99
   + % cost) for the paper.
+- `session_cost_distribution.md` — GFM Markdown mirror of the table, rendered on the web detail page.
+- `headline.json` — the few headline numbers for the Overview gallery card.
 - stdout — merged + per-provider (Claude / Codex) token and cost percentiles, plus the
   append / prefix / output cost composition.
 
@@ -45,3 +47,16 @@ uv run python artifacts/session/session_cost_distribution/analyze.py            
   ($0.59 / $0.33 / $0.074) with a heavy session tail (p99 = $172).
 
 No figures.
+
+## SyFI result analysis
+
+### session_cost_distribution.md
+
+For a coding agent the bill is dominated by re-reading context, not by generation (the paper's
+`tab:cost_distribution`). Cached **prefix tokens are 61.7%** of total spend even though they are
+billed at roughly a tenth of the fresh-input rate — pure volume, since the accumulating context is
+replayed on every step — against **26.7%** for append/new-input and only **11.6%** for output. Output
+is cheap in aggregate despite its high per-token price because each step emits so few tokens. The
+absolute costs are modest at the median ($0.59/session, $0.32/request, $0.07/step) but carry a heavy
+tail: the average session is $9.36 and p99 reaches **$172**, a few very long sessions driving most of
+the spend. This inverts the usual intuition that generation is the expensive part.
