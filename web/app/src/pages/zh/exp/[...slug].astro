@@ -1,0 +1,12 @@
+---
+import ExpDetail from '../../../components/surfaces/ExpDetail.astro';
+import { experiments } from '../../../lib/experiments';
+
+export function getStaticPaths() {
+  return experiments.map((e) => ({ params: { slug: e.slug }, props: { exp: e } }));
+}
+
+const { exp } = Astro.props;
+---
+
+<ExpDetail exp={exp} />

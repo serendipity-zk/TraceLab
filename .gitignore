@@ -22,6 +22,9 @@ artifacts/**/*.svg
 artifacts/**/*.pdf
 artifacts/**/*.md
 !artifacts/**/README.md
+# README.zh.md are hand-written Chinese translations of the write-ups (source content, same as
+# README.md — not a generated report), so keep them tracked too.
+!artifacts/**/README.zh.md
 # pricing.json is hand-maintained config (the single price source), not a generated report
 !artifacts/utils/pricing.json
 # hand-written schema reference (not a generated report), so keep it tracked:
@@ -52,6 +55,8 @@ web/server/data/
 /test_workload_*.tar.gz
 /trace.tar.gz
 web/app/*-preview.html
+# Local scratch workspace (unrelated infra / paper sources), never part of the build
+/temp/
 
 # Local-only deployment routine for UW CSE production host.
 .codex/skills/tracelab-send-to-production/
