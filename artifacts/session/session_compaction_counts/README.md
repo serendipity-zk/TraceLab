@@ -40,6 +40,8 @@ uv run python artifacts/session/session_compaction_counts/analyze.py \
 ## Outputs
 
 - `session_compaction_counts.tex` — the merged summary table (`tab:session_compaction`).
+- `session_compaction_counts.md` — GFM Markdown mirror of the table, rendered on the web detail page.
+- `headline.json` — the few headline numbers for the Overview gallery card.
 - stdout — merged + per-provider (Claude / Codex): total compactions, share of sessions with
   ≥1, the per-session distribution (avg / p25 / p50 / p90 / p99, over all sessions and over
   only those with ≥1), and the user-initiated-vs-tool-initiated trigger split.
@@ -53,3 +55,16 @@ uv run python artifacts/session/session_compaction_counts/analyze.py \
 - Among sessions that compact at all, the mean is 3.7 and the tail is long (Codex p99 = 34).
 
 No figures.
+
+## SyFI result analysis
+
+### session_compaction_counts.md
+
+Most large context drops are genuine compactions, and they hit Codex far harder than Claude (the
+paper's `tab:session_compaction`). Of the major (≥64k) reductions, **284/324** qualify for Claude
+and **1,235/1,306** for Codex — 1,519 of 1,630 combined — so the structural near-limit + slow-recovery
+test rarely flags a false positive. Compactions are uncommon per session but lopsided by provider:
+only **4.5%** of Claude sessions ever compact versus **18.4%** of Codex, and among sessions that do,
+the mean and tail are larger for Codex (avg 4.23, p99 = 34) than Claude (avg 2.37, p99 = 12). The
+trigger split mirrors the autonomy finding: Codex compactions are overwhelmingly **tool-initiated**
+(91.9%, auto-compaction mid-loop), while Claude's are more evenly split (63.0% tool / 37.0% user).

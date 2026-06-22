@@ -90,7 +90,7 @@ uv run python artifacts/human_in_the_loop/human_input_wait/plot.py -i trace/samp
 uv run python artifacts/human_in_the_loop/human_input_wait/plot.py --db /tmp/trace.duckdb -o /tmp/out
 ```
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `human_input_wait_cdf.png` — single-axis wait CDF overlaying `all` and each provider, with
   `n`/`p50`/`p90` in the legend.
@@ -109,27 +109,29 @@ Each PNG embeds this README, the CSVs above, and the plotting code (`plot.py` + 
 
 ### human_input_wait_cdf.png
 
-A single log-x CDF overlaying the `all` curve (in the neutral text color) and one curve per provider,
-each labeled with its count and `p50`/`p90` wait. The x-axis is the wait from the previous event of
-any type to the next user message, with landmark ticks from 1s out to a week. Read the height a curve
-reaches at, say, the 5-minute or 1-hour tick to gauge what fraction of requests the human answers
-quickly versus walking away: an early, steep rise means tight back-and-forth, while a long right tail
-shows sessions resumed minutes, hours, or days later. Provider curves can be compared directly for
-differences in interaction cadence.
+The wait distribution is short at the body but spans seven orders of magnitude into the tail. The
+median human reply is fast — **~86s overall** (Claude p50 79s, Codex p50 95s) — but the curve keeps
+climbing well past an hour: p90 is ~21 min overall, p99 ~14h, and the longest gap is a session
+resumed **~31 days** later. The two providers track closely through the body, with Codex sitting
+slightly to the right (higher mean idle, 3,260s vs Claude's 2,401s). Read the height at the 5-minute
+or 1-hour landmark to see how often the human answers before the prefix cache likely goes cold; the
+long right tail is sessions left open for hours or days.
 
 ### human_input_wait_count_cdf_by_provider.png
 
-A per-provider cumulative count of waits against the wait threshold on a log x-axis, capped at 1h
-with a 5-minute reference line. Read the x-position where each curve reaches a given height to
-compare how promptly humans reply: a curve that rises early means most idle gaps are short. The
-in-figure table reports the per-provider percentiles and mean, and the 5-minute landmark marks a
-plausible prompt-cache eviction horizon — waits to the right of it are likely cold on the next request.
+By count, most idle gaps are short — both curves rise early and are nearly saturated by the 1h cap.
+By the 5-minute eviction landmark **79.6% of Claude waits and 69.8% of Codex waits** have already
+elapsed, and by 1h it is **96.4% / 94.9%**. So roughly one reply in five (Claude) to one in three
+(Codex) takes longer than 5 minutes — long enough that the prefix is likely cold on the next request.
+Codex's curve trails Claude's throughout, consistent with its slightly longer typical wait. The
+in-figure table carries the per-provider percentiles and mean.
 
 ### human_input_wait_total_cdf_by_provider.png
 
-The same per-session waits, but each wait now contributes its *duration* rather than a unit count, so
-the curve traces the cumulative summed idle time up to threshold `T` (capped at 1h). This shows
-**where total idle time accumulates**: because long waits carry disproportionate time, this curve
-saturates much later than the count CDF — a small fraction of very long gaps can dominate total idle
-time. Compare the gap between this figure and the count CDF to see how concentrated each provider's
-idle time is in its long-wait tail, and how much of it sits past the 5-minute cache-eviction line.
+Weighting each wait by its *duration* flips the picture: the short gaps that dominate the count carry
+almost none of the time. By the 5-minute landmark — where ~70–80% of waits have ended — only **2.8%
+of Claude's and 1.5% of Codex's total idle time** has accrued, and even by 1h the cumulative time
+share is just **11.6% / 8.9%**. The remaining ~90% of all human idle time lives in waits longer than
+an hour, i.e. off the right edge of this 1h-capped axis. The huge gap between this curve and the count
+CDF is the headline: a tiny minority of very long gaps owns essentially all of the idle wall-clock,
+so cache-retention decisions are governed by the tail, not the median.

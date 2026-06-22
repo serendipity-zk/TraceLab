@@ -99,29 +99,28 @@ Each PNG is self-contained — it embeds this README, the CSVs, and the plotting
 
 ### tool_latency_by_tool.png
 
-Per-call latency spans many orders of magnitude and the spread is tool-specific, not provider-wide.
-Reading the panels (Claude and Codex, top tools by call count, log-scale x):
-
-- Boxes are the IQR, the inner line the median, whiskers the 5th/95th percentiles; outliers beyond
-  are suppressed (`showfliers=False`), so the chart reads as the bulk of the distribution.
-- Fast file/edit primitives (`Read`, `Edit`, `Grep`, `apply_patch`) cluster in the tens-to-hundreds
-  of milliseconds with tight boxes; blocking tools — shell execution, agents, plan/question prompts,
-  `wait_agent`/`request_user_input` — sit seconds-to-minutes to the right with much wider boxes.
-- Tools are picked per provider by call count (top `--top-tools`) then ordered by median latency, so
-  vertical position reads as "typical slowness"; the long server-qualified `mcp_*` tools are merged
-  into one `mcp` box and the rare tail into `Other`.
+Latency depends heavily on tool type, and the per-call spread within a type is large (the paper's
+`fig:tool_latency_by_tool_top12`). Average tool-call latency across the trace is ~16.8s, but that
+mean hides enormous structure: fast file/edit primitives (`Read` p50 36 ms, `Edit` p50 95 ms,
+`Grep`, `apply_patch`) cluster in the tens-to-hundreds of milliseconds with tight boxes, while
+blocking tools — `Agent`, `AskUserQuestion`, shell execution, `wait_agent`/`request_user_input` —
+sit seconds-to-minutes to the right with much wider boxes. Even inside one tool the range is huge:
+Claude's `Bash` runs from milliseconds to minutes yet keeps a sub-second median (p50 ~409 ms).
+Boxes are the IQR with the median line and 5th/95th whiskers (outliers suppressed); tools are
+picked per provider by call count then ordered by median, so vertical position reads as typical
+slowness. The takeaway: tool type guides latency but is not sufficient on its own to predict it.
 
 ### tool_latency_weighted_bins.png
 
-The headline asymmetry: most calls are fast, but most *time* is spent in the rare slow calls. Each
-provider gets two 100%-stacked bars over the coarse latency bins — tool-call share on top, summed-
-latency share below — with dashed arrows tying each bin's slice between the two.
-
-- For both providers the call-count mass sits in the sub-second bins, while the latency mass shifts
-  hard right into the `1s–1m`/`1–10m` bins (Claude ~53% of latency in `1–10m`; Codex ~52% in
-  `1s–1m`).
-- This is the classic heavy-tail signature: optimizing the median tool call barely moves total tool
-  time; the long-running outliers dominate the budget.
+The headline asymmetry (the paper's `fig:tool_latency_weighted_bins`): most calls are fast, but
+most *time* is spent in the rare slow calls. Each provider gets two 100%-stacked bars over the
+coarse latency bins — tool-call share on top, summed-latency share below — with dashed arrows tying
+each bin's slice between the two. The split is dramatic and provider-specific: for Claude, sub-1s
+calls are ~70% of calls but under 1% of total tool time, while calls over 1 min are only ~4.9% of
+calls yet contribute ~92% of the time. Codex is less extreme but still tail-dominated — sub-10s
+calls are ~88% of calls but ~12% of time, while calls over 1 min are ~3.1% of calls and ~61% of
+time. This is the classic heavy-tail signature: optimizing the median tool call barely moves total
+tool time; the long-running outliers own the budget.
 
 ### tool_latency_count_cdf_by_provider.png
 
@@ -130,7 +129,7 @@ carries exact p25/p50/p90/p99/avg.
 
 - Codex's curve rises later but steepens sharply around the ~1s mark (a near-vertical step where a
   large block of `write_stdin`/`exec_command` calls land at similar latencies), then saturates;
-  Claude rises earlier and more smoothly (median ~125 ms vs Codex ~626 ms).
+  Claude rises earlier and more smoothly (median ~129 ms vs Codex ~626 ms).
 - Both curves flatten well before the minutes range — the overwhelming majority of calls resolve in
   under a few seconds, confirming the long tail is a small fraction of *calls*.
 
@@ -143,7 +142,7 @@ minutes.
 - Both curves stay near zero until the seconds-to-minutes range, then climb steeply — the bulk of
   the hundreds of cumulative hours is contributed by calls in (and beyond) the minutes range, even
   though those calls are rare (per the count CDF).
-- Claude accumulates more total tool-hours overall and keeps climbing into the multi-hour tail;
-  Codex's total plateaus earlier. Because latency is additive over parallel calls, treat these
-  totals as attributed tool work, not elapsed wall-clock session time.
+- Claude accumulates more total tool-hours overall (~1251h vs Codex's ~413h) and keeps climbing
+  into the multi-hour tail; Codex's total plateaus earlier. Because latency is additive over
+  parallel calls, treat these totals as attributed tool work, not elapsed wall-clock session time.
 ```

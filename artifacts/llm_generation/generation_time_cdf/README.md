@@ -72,7 +72,7 @@ uv run python artifacts/llm_generation/generation_time_cdf/plot.py -i trace/samp
 uv run python artifacts/llm_generation/generation_time_cdf/plot.py --db /tmp/trace.duckdb -o /tmp/out
 ```
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `llm_generation_time_count_cdf_by_provider.png` / `.csv` — per-provider count CDF over the
   generation-time threshold (steps `≤ T`), with per-bin and cumulative counts/shares.
@@ -87,17 +87,18 @@ Each PNG embeds this README, the CSVs above, and the plotting code (`plot.py` + 
 
 ### llm_generation_time_count_cdf_by_provider.png
 
-A per-provider cumulative count of agent steps against the observable generation-time threshold on a log
-x-axis. Read the x-position where each curve reaches a given height to compare how quickly steps
-finish: a curve that rises early means most steps generate fast, while a long flat tail to the right
-marks the slow steps. The in-figure table reports `p25/p50/p90/p99` and the mean per provider, and
-the dashed landmark lines anchor familiar durations (seconds, a minute, etc.) for quick reads.
+Per-provider cumulative *count* of agent steps against the observable generation-time threshold, on a
+log time axis. Read where each curve reaches a given height to compare how fast steps finish: an
+early-rising curve means most steps generate quickly, while a long flat tail to the right marks the
+slow minority. The in-figure table carries the actual `p25/p50/p90/p99` and mean per provider, and the
+dashed landmark lines anchor familiar durations (a second, a minute) so the percentiles are easy to
+place. This is the trace-observed span (latest input event to last model output), not a serving-engine
+timer, so it folds in TTFT, reasoning, and trace-logging effects.
 
 ### llm_generation_time_total_cdf_by_provider.png
 
-The same per-step spans, but each step now contributes its *duration* rather than a unit count, so
-the curve traces the cumulative summed generation time (in hours) up to threshold `T`. This shows
-**where the wall time actually goes**: because slow steps carry disproportionate time, this curve
-saturates much later than the count CDF — a small fraction of long steps can dominate total
-generation time. Compare the gap between the two figures to see how concentrated each provider's time
-spend is in its tail.
+The same per-step spans, but each step now contributes its *duration* rather than one unit, so the
+curve traces cumulative summed generation time (in hours) up to threshold `T` — i.e. **where the wall
+time actually goes**. Because slow steps carry disproportionate time, this curve saturates much later
+than the count CDF: a small tail of long steps dominates the total. The gap between the two figures is
+the takeaway — the wider it is, the more concentrated that provider's time spend is in its slow tail.

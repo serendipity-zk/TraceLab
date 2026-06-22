@@ -120,20 +120,23 @@ Unpack with `python artifacts/utils/png_sidecar.py extract <png>`.
 ### user_wait_time_vs_hit_rate_scatter.png
 
 Per-step **human idle wait** (x, log scale from ~1ms to the data max, ticked at 0s/10ms/.../7d/14d)
-against **prefix-cache hit rate** (y, 0–100%), one panel per provider with the per-panel point count
-in its title. A shaded band marks waits beyond 5m and a red dashed line marks the 10% low-hit floor;
-vertical guides sit at the 5m and 1h waits. The question this answers visually: do the low-hit points
-(near the bottom) pile up at long waits (toward the right)? A mass of low hit-rate points beyond the
-5m/1h guides is the signature of time-based eviction — the cache went cold during the human's idle
-gap, so the next request re-appends most of its context. Conversely, low-hit points spread evenly
-across short and long waits would argue the misses are *not* idle-driven (e.g. genuinely new context).
+against **prefix-cache hit rate** (y, 0–100%), one panel per provider, with a shaded band beyond 5m,
+a red dashed 10% low-hit floor, and vertical guides at 5m and 1h. This is the user-trigger half of
+the paper's `fig:prefix_cache_hit_rate_by_idle_time`, and it shows the time-based-eviction signature:
+the low-hit points cluster at long waits. Below ~5m almost every step still hits, but past that the
+low-hit tail thickens, and beyond 1h the cache is effectively gone. The data backs this up — among
+user steps whose hit rate dips under 10%, the median preceding wait is ~21 min and the p90 is ~10.6 h,
+versus a ~2 min median wait for user steps overall. So user misses are idle-driven: the prefix ages
+out during the human's pause and the next request re-appends most of its context.
 
 ### tool_result_wait_time_vs_hit_rate_scatter.png
 
 The same layout for **tool-triggered steps**, with x as the **leading tool duration**
-(`result_at - emitted_at`) instead of the human wait. Tool gaps are typically far shorter than human
-waits, so the cloud concentrates at the sub-second-to-minutes range; the shaded >5m band and the 1h
-guide are usually sparse here. Low-hit points trailing toward the longer tool durations would suggest
-that even tool-bound idle time can age out the cache, whereas hit rates that stay high across tool
-durations indicate the cache survives tool-triggered follow-ups — the common case, since most tools return
-quickly relative to typical eviction timeouts.
+(`result_at - emitted_at`) instead of the human wait. Tool gaps are far shorter than human waits, so
+the cloud concentrates from sub-second to a few minutes and the >5m band is sparse — especially for
+Codex, which pushes long-running work into the background so its tool steps resume quickly (median
+gap ~0.25s, p90 ~30s). Hit rates stay high across nearly all tool durations: the cache routinely
+survives tool-triggered follow-ups because most tools return well inside any plausible eviction
+window. The handful of low-hit tool steps that do appear trail toward the longer durations, the same
+aging effect as the human-wait panel but rare here. This is why `tab:prefix_cache_hit_rate` puts
+tool-result hit at ~97.5% while user-initiated lags.

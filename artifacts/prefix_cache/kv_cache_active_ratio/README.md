@@ -108,12 +108,15 @@ shared `artifacts/utils/` modules). Unpack with `python artifacts/utils/png_side
 ### kv_cache_active_ratio_by_provider.png
 
 The active ratio vs the cache-eviction timeout `T`, one curve per provider, on a log-x timeout axis
-from 1s to 1h with dashed landmark lines at 1m/5m/10m/30m/1h and the y-axis as a percentage. Each
-curve is monotonically non-decreasing in `T`: as the engine tolerates longer idle gaps before
-evicting, more tool/human waits fall under the survives-the-gap threshold and count as active rather
-than as cold rebuild time, so the ratio rises toward 1. Read a curve's height at a landmark to gauge
-how much of total wall time the KV cache would be live under that eviction policy — a high value at a
-short `T` means the cache pays off even with aggressive eviction, while a curve that only climbs near
-the 30m/1h marks signals that most reuse depends on holding the cache through long human/tool idle
-gaps. The inset table reports each provider's generation total and its active ratio at the five
-landmark timeouts; the legend carries the generation hours per provider.
+from 1s to 1h with dashed landmark lines at 1m/5m/10m/30m/1h and the y-axis as a percentage. The
+counter-intuitive read: the ratio **falls** as `T` grows. A longer timeout keeps the KV alive
+through more (and longer) idle gaps, so suspended idle time piles into the denominator faster than
+the fixed generation total, and the share of wall time spent actively decoding drops. At a 1 min
+timeout the cache is live ~80% of the time for Claude and ~73% for Codex, but by 10 min that has
+already fallen to ~37% / ~39%, and by 1 h to ~20% / ~22% — so holding the cache through long human
+and tool waits means the KV mostly sits suspended rather than working. The two providers track
+closely (generation totals ~574 h Claude / ~567 h), confirming the storage cost is driven by idle,
+not generation. This is the mirror of `eviction_tradeoff`'s storage ratio `R`: more retained idle
+buys hit rate but lowers how much of the held cache is doing useful work. The inset table reports
+each provider's generation total and its active ratio at the five landmark timeouts; the legend
+carries the generation hours per provider.

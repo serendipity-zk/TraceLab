@@ -75,7 +75,7 @@ Selection knobs: `--top-sessions`, `--context-sessions`, `--compaction-sessions`
 `--max-steps` (window a long session), `--candidate-limit` (CSV depth). `--select-offset` /
 `--select-stride` shard the selected set for parallel rendering.
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `<session>_token_steps.png` — one figure per selected session (filename is a stable hash of the
   session id).
@@ -90,18 +90,19 @@ Each PNG embeds this README, the candidate CSV, and `plot.py`. Unpack with
 
 ### <session>_token_steps.png
 
-Every session figure reads the same way (the filename is just the session's hash):
+One session, watched step by step (the paper's `fig:session_progress_example`; the filename is just
+the session's hash). Every figure reads the same way:
 
-- **The orange/blue split is the cache story.** A tall blue base under a thin orange cap means most
-  of each step's input is cheap cached prefix and only a little is newly appended — the efficient
-  steady state. When orange grows, the agent is feeding in a lot of fresh context during that step.
-- **The total-input line climbing across steps** is the context window filling up. Coding sessions
-  characteristically ramp toward the model's limit as tool results and file contents accumulate.
-- **Purple `C` markers are compaction** — the point where the running total collapses and the
-  session effectively restarts its context. The bands let you see how many steps the agent got
-  before it had to compact, and whether it compacts once or repeatedly.
-- **Red `U` lines are user-initiated steps.** Their spacing shows how much autonomous tool-driven work
-  happens between each thing the user says — wide gaps mean long agentic stretches on one
-  instruction.
-- **The timeline strip** separates compute from wall-clock: adjacent steps far apart in time mark
-  where the human was reading/thinking, while dense blocks are the agent working uninterrupted.
+- **The orange/blue split is the cache story.** A tall blue (prefix) base under a thin orange
+  (append) cap is the efficient steady state — most of the step's input is cheap cached prefix and
+  little is freshly paid for. Steps are usually initiated close together in time, so the cache holds
+  and the prefix stays warm; a sudden tall orange bar is a cache miss forcing a large fresh prefill,
+  as in the paper's example where ~10 minutes of human inactivity around step 28 evicts the prefix.
+- **The total-input line climbs** as tool results and file contents accumulate, ramping the window
+  toward the model's limit.
+- **Purple `C` markers are compaction** — the running total collapses and the session restarts its
+  context; the bands show how many steps it lasted and whether it compacts once or repeatedly.
+- **Red `U` lines are user-initiated steps**; wide gaps between them mean long autonomous tool-driven
+  stretches on a single instruction.
+- **The timeline strip** separates compute from wall-clock — adjacent steps far apart in time are
+  where the human was reading/thinking, dense blocks are the agent working uninterrupted.

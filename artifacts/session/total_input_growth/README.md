@@ -65,17 +65,30 @@ Knobs: `--micro-reduction-max-tokens` / `--major-reduction-min-tokens` retune th
 `--no-drilldowns` writes only the summary, `--limit-events` caps each drilldown after a stable sort,
 and `--summary-csv` / `--events-csv` / `--reductions-csv` / `--micro-csv` override individual paths.
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `total_input_growth_summary.csv` — growth/reduction bucket counts and delta stats per
   `(scope, trigger)`.
+- `total_input_growth.md` — GFM mirror of the paper float `tab:context_growth_and_compaction`
+  (Claude vs Codex, by step trigger), rendered on the web detail page.
 - `total_input_growth_events.csv` — every same-session growth event, in trace order.
 - `total_input_reductions.csv` — only the negative-delta events (all three reduction buckets).
 - `total_input_micro_reductions.csv` — only the micro-reduction events.
 
-CSV only — no figures.
+No figures.
 
 ## SyFI result analysis
+
+### total_input_growth.md
+
+Context almost always grows step to step (the paper's `tab:context_growth_and_compaction`). Across
+all steps the window grows on **99.60%** of Claude steps and **96.56%** of Codex steps — new user
+input, tool results, and output all stack onto the prior context — adding ~1.7k–1.8k tokens per
+growing step. Reductions are rare and provider-shaped: for Claude the negatives are a tiny 0.39% and
+skew **major** (0.24%, real compactions), whereas Codex reduces ~9× more often (3.43%) and mostly in
+the harmless **micro/ordinary** bands. The split also concentrates by trigger: Codex's reductions
+pile up on **user-initiated** steps (31.3% of those steps shrink, vs. 0.97% of tool-initiated),
+while tool-initiated steps for both providers grow ~99% of the time.
 
 ### total_input_growth_summary.csv
 

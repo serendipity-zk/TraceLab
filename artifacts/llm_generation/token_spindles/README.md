@@ -63,7 +63,7 @@ uv run python artifacts/llm_generation/token_spindles/plot.py --db /tmp/trace.du
 
 `--db | -i/--input | -o/--output-dir` are the standard I/O flags; `-o` defaults to this folder.
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `token_spindles_transparent.png` — the combined transparent spindle figure.
 - `token_spindle_summary.csv` — per-metric counts (positive / zero) and quantiles

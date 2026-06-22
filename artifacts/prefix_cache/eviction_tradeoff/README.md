@@ -84,7 +84,7 @@ uv run python artifacts/prefix_cache/eviction_tradeoff/analyze.py --db /tmp/trac
 uv run python artifacts/prefix_cache/eviction_tradeoff/analyze.py --no-plots # CSV only
 ```
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `eviction_tradeoff_by_scope.csv` — per `(scope, tau)`: achievable hit rate, prefill amplification,
   redundant prefill ratio, fresh floor, optimal hit rate, optimal amplification, storage ratio `R`,
@@ -97,16 +97,25 @@ uv run python artifacts/prefix_cache/eviction_tradeoff/analyze.py --no-plots # C
 
 ## SyFI result analysis
 
-The trade-off is steep then flat. For the merged trace, raising the timeout from **1 min to 1 h**
-lifts the achievable hit rate **85.4% -> 98.6%** but grows the storage ratio **R = 0.74 -> 5.07**
-(~7x more suspended KV). Most of the gain is cheap: by **5 min** the hit rate is already ~94.3% at
-`R ~ 1.9`; the remaining push to 1 h costs ~2.7x more storage for ~4 points.
+### eviction_tradeoff_by_timeout.png
 
-Prefill amplification makes the waste concrete. The idealised curve **floors at 1x** (an
-eviction-free perfect cache prefills only fresh) and inflates as eviction tightens: merged **18.9x at
-1 min**, 7.4x at 5 min, 1.8x at 1 h. The **real** deployed cache prefills **~5.5x** the fresh minimum
-(Claude 8.1x, Codex 4.0x) --- this is exactly `1 / (fresh % of append)` from the `redundant_prefill`
-table. That real operating point sits on the idealised curve at an **effective eviction time of ~8
-min** (Claude ~10 min, Codex ~5 min): the real prefix cache behaves like an ideal cache that evicts
-after ~8 minutes of idle. So the gap-to-optimal of the prior section and the eviction sweep here are
-two views of the same thing.
+Three stacked panels sharing the eviction-timeout x-axis (the paper's `fig:eviction_tradeoff`):
+achievable hit rate, storage ratio `R`, and prefill amplification, each with its eviction-free
+optimum as a dotted reference. The trade-off is steep then flat. For the merged trace, raising the
+timeout from **1 min to 1 h** lifts the achievable hit rate **85.4% -> 98.6%** but grows the storage
+ratio **R = 0.74 -> 5.07** (~7x more suspended KV). Most of the gain is cheap: by **5 min** the hit
+rate is already ~94% at `R ~ 1.9`, and the remaining push to 1 h buys only ~4 more points for ~2.7x
+the storage. The bottom panel makes the waste concrete: amplification **floors at 1x** (an
+eviction-free cache prefills only fresh) and inflates as eviction tightens — merged **18.9x at 1 min**,
+7.4x at 5 min, 1.8x at 1 h.
+
+### eviction_tradeoff_pareto.png
+
+Achievable hit rate against storage ratio `R`, with eviction-time landmarks marked — the same
+sweep read as a Pareto frontier. The knee sits near 5 min: past it you pay sharply more storage for
+shrinking hit-rate gains. The **real** deployed cache is overlaid as a reference point; it prefills
+~5.3x the fresh minimum (8.1x Claude, 3.9x Codex), exactly `1 / (fresh % of append)` from the
+`redundant_prefill` table. That operating point lands on the idealised curve at an **effective
+eviction time of ~8 min** (Claude ~10 min, Codex ~5 min): the real prefix cache behaves like an
+ideal cache that evicts after ~8 minutes of idle. So the gap-to-optimal of `redundant_prefill` and
+this eviction sweep are two views of the same thing.

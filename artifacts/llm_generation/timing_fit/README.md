@@ -56,7 +56,7 @@ uv run python artifacts/llm_generation/timing_fit/fit_timing_trace.py
 Use `--timing-input` with `artifacts/run_all.py` only when intentionally consuming an
 existing external timing CSV instead of deriving one from `--input`.
 
-## Outputs (written here)
+## Outputs
 
 - `timing_fit_trace.csv` — derived timing-segment input consumed by timing experiments.
 - `timing_fit_coefficients.csv` — fitted model coefficients per group.

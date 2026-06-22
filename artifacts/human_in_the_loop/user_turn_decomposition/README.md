@@ -110,7 +110,7 @@ The `run_all.py` registry launches this experiment with `style="global"` (no CLI
 imports the module, sets `module.INPUT = <trace>`, and calls `main()`, which honors that `INPUT` as
 its `-i` default.
 
-## Outputs (written to `-o`, default this folder)
+## Outputs
 
 - `result_analysis.md` — the decomposition audit: a **Provider Totals** table (response-triggering
   user rows, sampled turns, and `e2e` / `generation` / `tool effective` / `tool wall` /
