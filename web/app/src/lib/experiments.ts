@@ -334,6 +334,21 @@ export const experiments: Experiment[] = [
     ],
   },
   {
+    slug: 'prefix_cache/human_idle_cache_counterfactual',
+    category: 'prefix_cache',
+    title: 'Cost of human thinking time',
+    blurb: 'Upper-bound prefill and cost savings if user-initiated steps retained prefix cache across human thinking time.',
+    readme: 'artifacts/prefix_cache/human_idle_cache_counterfactual/README.md',
+    figures: [],
+    tables: [
+      {
+        src: 'artifacts/prefix_cache/human_idle_cache_counterfactual/human_idle_cache_counterfactual.md',
+        caption:
+          'Upper-bound append-token and cost savings from eliminating user-thinking-induced prefix-cache misses.',
+      },
+    ],
+  },
+  {
     slug: 'prefix_cache/eviction_tradeoff',
     category: 'prefix_cache',
     title: 'Eviction trade-off',

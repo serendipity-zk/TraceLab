@@ -32,7 +32,9 @@ Only the scripts and `README.md` files are tracked in git. Generated outputs
 - `tool_calls/` — `tool_latency_distribution`, `tool_call_counts`, `tool_time_by_kind`,
   `tool_category_distribution`, `claude_long_tool_calls`.
 - `prefix_cache/` — cache hit-rate behavior: `cache_hit_ratio`,
-  `cache_hit_idle_relationship`, `cache_replay`, `kv_cache_active_ratio`.
+  `cache_hit_idle_relationship`, `redundant_prefill`,
+  `human_idle_cache_counterfactual`, `cache_replay`, `kv_cache_active_ratio`,
+  `eviction_tradeoff`.
 - `human_in_the_loop/` — `human_input_wait`, `user_turn_response_time`,
   `user_turn_decomposition`.
 - `session/` — `session_token_steps`, `total_input_growth`.
