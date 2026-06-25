@@ -5,7 +5,7 @@ Cost Distribution table (``tab:cost_distribution`` in ``src/04_SessionContext.te
 For each granularity we break the workload into the three billed categories and report, for
 both the token count and the USD cost, avg / p25 / p50 / p90 / p99:
 
-* **Append tokens** -- ``newly_append_tokens``, billed at the fresh-input rate.
+* **Append tokens** -- ``newly_append_tokens``, billed at the fresh-input/cache-write rates.
 * **Prefix tokens** -- ``prefix_tokens``, billed at the cache-read rate.
 * **Output tokens** -- ``output_tokens`` (reasoning included), billed at the output rate.
 * **Total** -- the sum of the three.
@@ -17,8 +17,9 @@ Definitions reuse the canonical experiments so the numbers reconcile:
 
 * **Cost** is computed with the single-source price table ``artifacts/utils/pricing.json`` via
   ``web_analytics/pricing.py`` (``price_for`` -> per-model exact/family resolve; ``round_cost``
-  -> append at input rate, prefix at cache-read rate, output at output rate). Rounds whose model
-  has no price are *unpriced* and excluded (99.1% of rounds are priced); coverage is reported.
+  -> append at input/cache-write rates, prefix at cache-read rate, output at output rate). Rounds
+  whose model has no price are *unpriced* and excluded (99.1% of rounds are priced); coverage is
+  reported.
 * A **request** is one user turn -- the same turn state machine as
   ``human_in_the_loop/user_turn_decomposition`` (identical to ``user_turn_response_time`` and
   ``session_internal_counts``). A **step** is one LLM round; a **session** is one ``session_id``.
@@ -59,6 +60,19 @@ CATEGORIES = (
 _PER_M = 1_000_000
 
 
+def _has_round_column(con, column: str) -> bool:
+    return bool(
+        con.execute(
+            """
+            SELECT count(*) > 0
+            FROM information_schema.columns
+            WHERE table_name = 'rounds' AND column_name = ?
+            """,
+            [column],
+        ).fetchone()[0]
+    )
+
+
 def _load_module(name: str, relpath: str) -> Any:
     spec = importlib.util.spec_from_file_location(name, REPO_ROOT / relpath)
     module = importlib.util.module_from_spec(spec)
@@ -90,9 +104,14 @@ def collect(con) -> tuple[dict[str, dict[str, list[dict]]], dict[str, int]]:
     """Return ``(units, meta)`` where ``units[scope][granularity]`` is a list of per-unit token/
     cost dicts, and ``meta`` carries priced/unpriced round counts."""
     events_by_round = DEC.load_timing_events(con)
+    cache_write_expr = (
+        "claude_cache_creation_input_tokens"
+        if _has_round_column(con, "claude_cache_creation_input_tokens")
+        else "CAST(NULL AS BIGINT) AS claude_cache_creation_input_tokens"
+    )
     rows = con.execute(
         "SELECT round_pk, provider, model, session_id, prefix_tokens, newly_append_tokens, "
-        "output_tokens FROM rounds ORDER BY round_pk"
+        f"{cache_write_expr}, output_tokens FROM rounds ORDER BY round_pk"
     ).fetchall()
 
     units: dict[str, dict[str, list[dict]]] = {
@@ -112,7 +131,7 @@ def collect(con) -> tuple[dict[str, dict[str, list[dict]]], dict[str, int]]:
             if scope in units:
                 units[scope]["request"].append(turn["acc"])
 
-    for rpk, prov, model, sid, pre, app, out in rows:
+    for rpk, prov, model, sid, pre, app, cache_write, out in rows:
         sid = sid if isinstance(sid, str) and sid else None
         events = events_by_round.get(rpk, [])
         start = DEC.response_trigger_user_message_timestamp(events)
@@ -126,9 +145,13 @@ def collect(con) -> tuple[dict[str, dict[str, list[dict]]], dict[str, int]]:
         else:
             priced += 1
             pre, app, out = int(pre or 0), int(app or 0), int(out or 0)
-            pc = pre * price["cachedInputPerM"] / _PER_M
-            ac = app * price["inputPerM"] / _PER_M
-            oc = out * price["outputPerM"] / _PER_M
+            cache_write = int(cache_write or 0)
+            rc = pricing.round_cost(
+                price, pre, app, out, cache_write_tokens=cache_write
+            )
+            pc = rc["cachedCost"]
+            ac = rc["inputCost"]
+            oc = rc["outputCost"]
             unit = {"pre_t": pre, "app_t": app, "out_t": out, "pre_c": pc, "app_c": ac, "out_c": oc}
             for scope in ("merged", prov):
                 if scope in units:
@@ -225,11 +248,11 @@ def render_tex(units: dict[str, dict[str, list[dict]]], meta: dict[str, int]) ->
         "% edit by hand; re-run on the trace to refresh.",
         "\\begin{table}[t]",
         "\\centering",
-        "\\caption{Per-session, per-request, and per-step cost (USD) by category. List prices "
-        "(\\texttt{pricing.json}, as of 2026-06): append tokens at the fresh-input rate, "
-        "prefix tokens at the cache-read rate, output tokens at the output rate; "
-        f"{priced_pct:.1f}\\% of rounds priced. \\emph{{\\% cost}} is each category's share of "
-        "total spend (identical across groupings).}",
+        "\\caption{Per-session, per-request, and per-step cost (USD) by category under the "
+        "provider list prices in \\cref{tab:pricing_snapshot}: append tokens at "
+        "fresh-input/cache-write rates, prefix tokens at the cache-read rate, and output tokens "
+        f"at the output rate. Overall, {priced_pct:.1f}\\% of rounds are priced; "
+        "\\emph{\\% cost} is each category's share of total spend.}",
         "\\label{tab:cost_distribution}",
         "\\small",
         "\\setlength{\\tabcolsep}{4pt}",

@@ -20,10 +20,10 @@ prefix_after_retained_cache(S)  = total_input(S) - append_after_retained_cache(S
 
 All other steps keep their observed `prefix_tokens` / `newly_append_tokens` split. The total input
 length and output tokens do not change. Any append-token reduction is moved into prefix tokens and
-billed at the cache-read price, so the cost reduction is the price difference between fresh input
-and cache-read input for those shifted tokens. Because the estimate assumes all shifted tokens can
-be served from cache at the cache-read rate, the resulting savings are an upper bound rather than an
-achievable policy guarantee.
+billed at the cache-read price; remaining Claude cache-creation tokens are billed at the 5-minute
+cache-write rate. Because the estimate assumes all shifted tokens can be served from cache at the
+cache-read rate, the resulting savings are an upper bound rather than an achievable policy
+guarantee.
 
 Method and assumptions:
 
@@ -35,8 +35,8 @@ Method and assumptions:
 - This isolates the consumer-side cost of human thinking time. Tool-result steps and session-first
   steps are left as observed.
 - Costs use `artifacts/utils/pricing.json` through `artifacts/web_analytics/pricing.py`: append at
-  the fresh-input rate, prefix at the cache-read rate, output unchanged. Unpriced rounds contribute
-  to token counts but are excluded from dollar totals.
+  fresh-input/cache-write rates, prefix at the cache-read rate, output unchanged. Unpriced rounds
+  contribute to token counts but are excluded from dollar totals.
 
 ## Code structure
 
@@ -76,7 +76,7 @@ thinking time, append-prefill would drop from **2.34B** to **1.26B** tokens in t
 **1.07B-token** reduction, or **45.9%** of all append tokens. Because the estimate only changes
 user-initiated steps, that reduction is **95.1%** of observed user-initiated append tokens.
 
-With `pricing.json` prices as of **2026-06**, the estimated final cost falls from **$39,016** to
-**$34,628**, saving **$4,388** (**11.2%**) over priced rounds. The split is **648.1M** fewer append
-tokens and **$2,880** saved for Claude, and **423.9M** fewer append tokens and **$1,508** saved for
+With `pricing.json` prices as of **2026-06**, the estimated final cost falls from **$40,431** to
+**$35,242**, saving **$5,189** (**12.8%**) over priced rounds. The split is **648.1M** fewer append
+tokens and **$3,680** saved for Claude, and **423.9M** fewer append tokens and **$1,508** saved for
 Codex. Dollar totals price **99.1%** of rounds; token reductions include all rounds.

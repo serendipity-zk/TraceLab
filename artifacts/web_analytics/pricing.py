@@ -6,14 +6,15 @@ so prices are edited in exactly one place. This module mirrors that file's resol
 (exact ``provider:model`` -> family lowercase-substring -> unpriced) so native and in-browser
 (Pyodide) cost numbers reconcile with the mock.
 
-USD per 1,000,000 tokens. ``cachedInputPerM`` is the cache-READ rate.
+USD per 1,000,000 tokens. ``cachedInputPerM`` is the cache-READ rate;
+``cacheWrite5mInputPerM`` is the Anthropic 5-minute cache-WRITE rate when present.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import NotRequired, Optional, TypedDict
 
 # pricing.json lives one level up under utils/. Resolve relative to this file so it works both
 # natively (artifacts/web_analytics -> artifacts/utils) and under Pyodide (/repo/artifacts/...).
@@ -24,6 +25,7 @@ _PER_M = 1_000_000
 
 class ModelPrice(TypedDict):
     inputPerM: float
+    cacheWrite5mInputPerM: NotRequired[float]
     cachedInputPerM: float
     outputPerM: float
 
@@ -47,19 +49,25 @@ def price_for(provider: str, model: Optional[str]) -> Optional[ModelPrice]:
         return None
     exact = _EXACT.get(f"{provider}:{model}")
     if exact:
-        return {
+        price: ModelPrice = {
             "inputPerM": exact["inputPerM"],
             "cachedInputPerM": exact["cachedInputPerM"],
             "outputPerM": exact["outputPerM"],
         }
+        if "cacheWrite5mInputPerM" in exact:
+            price["cacheWrite5mInputPerM"] = exact["cacheWrite5mInputPerM"]
+        return price
     lowered = model.lower()
     for fam in _FAMILY:
         if fam["match"] in lowered:
-            return {
+            price = {
                 "inputPerM": fam["inputPerM"],
                 "cachedInputPerM": fam["cachedInputPerM"],
                 "outputPerM": fam["outputPerM"],
             }
+            if "cacheWrite5mInputPerM" in fam:
+                price["cacheWrite5mInputPerM"] = fam["cacheWrite5mInputPerM"]
+            return price
     return None
 
 
@@ -69,6 +77,7 @@ def _per_token(per_m: float) -> float:
 
 class RoundCost(TypedDict):
     inputCost: float
+    cacheWriteCost: float
     cachedCost: float
     outputCost: float
     reasoningCost: float
@@ -81,20 +90,27 @@ def round_cost(
     append_tokens: float,
     output_tokens: float,
     reasoning_tokens: float = 0,
+    cache_write_tokens: float = 0,
 ) -> RoundCost:
     """Cost of one round (or a summed bucket) given its token split. Mirrors ``roundCost`` in
-    cost.ts: append billed at fresh-input rate, prefix at cache-read rate, output at output rate;
-    ``reasoningCost`` is the reasoning slice of output (already included in ``total`` via output)."""
-    input_cost = append_tokens * _per_token(price["inputPerM"])
+    cost.ts: append billed at fresh-input/cache-write rates, prefix at cache-read rate, output at
+    output rate; ``reasoningCost`` is the reasoning slice of output (already included in ``total``
+    via output)."""
+    write_tokens = max(0.0, min(float(cache_write_tokens or 0), float(append_tokens or 0)))
+    base_append_tokens = float(append_tokens or 0) - write_tokens
+    write_rate = price.get("cacheWrite5mInputPerM", price["inputPerM"])
+    input_cost = base_append_tokens * _per_token(price["inputPerM"])
+    cache_write_cost = write_tokens * _per_token(write_rate)
     cached_cost = prefix_tokens * _per_token(price["cachedInputPerM"])
     output_cost = output_tokens * _per_token(price["outputPerM"])
     reasoning_cost = (reasoning_tokens or 0) * _per_token(price["outputPerM"])
     return {
-        "inputCost": input_cost,
+        "inputCost": input_cost + cache_write_cost,
+        "cacheWriteCost": cache_write_cost,
         "cachedCost": cached_cost,
         "outputCost": output_cost,
         "reasoningCost": reasoning_cost,
-        "total": input_cost + cached_cost + output_cost,
+        "total": input_cost + cache_write_cost + cached_cost + output_cost,
     }
 
 

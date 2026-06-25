@@ -142,6 +142,7 @@ EXPERIMENTS: list[Experiment] = [
     # session --------------------------------------------------------------
     Experiment("session", "session_token_steps", "session/session_token_steps/plot.py", "-i", "db", after=BUILD_DB_NAME),
     Experiment("session", "total_input_growth", "session/total_input_growth/analyze.py", "-i", "db", after=BUILD_DB_NAME),
+    Experiment("session", "session_cost_distribution", "session/session_cost_distribution/analyze.py", "-i", "db", after=BUILD_DB_NAME),
 ]
 
 # Return codes used internally for non-process outcomes.

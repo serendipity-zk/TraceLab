@@ -131,8 +131,8 @@ Reviewed as of: `{table.get("as_of", "unknown")}`
 
 Prices are USD per 1,000,000 tokens. Resolve prices by exact key `provider:model` first, then by
 lowercase substring match against `family[].match`; if neither matches, mark the rows unpriced
-rather than guessing. `cachedInputPerM` is the cache-read rate. Cache-write surcharges are not
-modeled because trace `prefix_tokens` are cache reads.
+rather than guessing. `cachedInputPerM` is the cache-read rate. `cacheWrite5mInputPerM`, when
+present, is the 5-minute cache-write rate; otherwise cache-write tokens use `inputPerM`.
 
 Every cost answer must report how many rounds were priced and how many were unpriced. Exclude
 unpriced rounds from dollar totals, and explicitly tell the user that those unpriced rounds were
@@ -141,10 +141,13 @@ excluded instead of estimating their cost.
 Cost formula for one row or aggregate bucket:
 
 ```python
-input_cost = newly_append_tokens * inputPerM / 1_000_000
+cache_write_tokens = coalesce(claude_cache_creation_input_tokens, 0)
+base_input_tokens = max(newly_append_tokens - cache_write_tokens, 0)
+input_cost = base_input_tokens * inputPerM / 1_000_000
+cache_write_cost = cache_write_tokens * coalesce(cacheWrite5mInputPerM, inputPerM) / 1_000_000
 cached_cost = prefix_tokens * cachedInputPerM / 1_000_000
 output_cost = output_tokens * outputPerM / 1_000_000
-total_cost = input_cost + cached_cost + output_cost
+total_cost = input_cost + cache_write_cost + cached_cost + output_cost
 reasoning_cost = coalesce(reasoning_output_tokens, 0) * outputPerM / 1_000_000
 ```
 

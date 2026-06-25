@@ -422,9 +422,9 @@
         "type": "table",
         "columns": ["provider", "priced_rounds", "unpriced_rounds", "total_cost_usd", "reasoning_cost_usd"],
         "rows": [
-          ["claude", 140338, 0, 21239.65, 0.0],
+          ["claude", 140338, 0, 22653.93, 0.0],
           ["codex", 213555, 3268, 17776.57, 912.35],
-          ["overall", 353893, 3268, 39016.22, 912.35]
+          ["overall", 353893, 3268, 40430.50, 912.35]
         ]
       },
       "grading": {"must_call_tool": true, "exact_integers": true, "decimal_tolerance": 0.01}

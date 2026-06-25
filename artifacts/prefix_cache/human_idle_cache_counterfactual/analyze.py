@@ -13,8 +13,9 @@ the step's net context growth:
 
 All other steps keep their observed ``prefix_tokens`` / ``newly_append_tokens`` split. The total
 input length of each step is unchanged, so any append-token reduction is moved into prefix tokens
-and billed at the cache-read price. Output tokens are unchanged. This is an upper-bound estimate
-because it assumes all shifted tokens can be served from cache at the cache-read rate.
+and billed at the cache-read price. Remaining Claude cache-creation tokens are billed at the
+5-minute cache-write rate. Output tokens are unchanged. This is an upper-bound estimate because it
+assumes all shifted tokens can be served from cache at the cache-read rate.
 """
 
 from __future__ import annotations
@@ -98,6 +99,19 @@ class ScopeAccum:
 
 def _int_or_zero(value) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _has_round_column(con, column: str) -> bool:
+    return bool(
+        con.execute(
+            """
+            SELECT count(*) > 0
+            FROM information_schema.columns
+            WHERE table_name = 'rounds' AND column_name = ?
+            """,
+            [column],
+        ).fetchone()[0]
+    )
 
 
 def _pct(numerator: float, denominator: float) -> float | None:
@@ -251,6 +265,11 @@ def _add_round(
 
 def collect(con) -> dict[str, ScopeAccum]:
     """Collect observed and counterfactual token/cost totals by provider and merged scope."""
+    cache_write_expr = (
+        "r.claude_cache_creation_input_tokens"
+        if _has_round_column(con, "claude_cache_creation_input_tokens")
+        else "CAST(NULL AS BIGINT) AS claude_cache_creation_input_tokens"
+    )
     rows = con.execute(
         """
         WITH first_ev AS (
@@ -286,6 +305,7 @@ def collect(con) -> dict[str, ScopeAccum]:
                r.model,
                r.prefix_tokens,
                r.newly_append_tokens,
+               {cache_write_expr},
                r.output_tokens,
                f.event_type,
                f.first_event_us,
@@ -294,7 +314,7 @@ def collect(con) -> dict[str, ScopeAccum]:
         FROM rounds r LEFT JOIN first_ev f USING (round_pk)
                       LEFT JOIN activity_bounds b USING (round_pk)
         ORDER BY r.round_pk
-        """
+        """.format(cache_write_expr=cache_write_expr)
     ).fetchall()
 
     accums: dict[str, ScopeAccum] = defaultdict(ScopeAccum)
@@ -306,6 +326,7 @@ def collect(con) -> dict[str, ScopeAccum]:
         model,
         prefix_tokens,
         append_tokens,
+        cache_write_tokens,
         output_tokens,
         event_type,
         first_event_us,
@@ -315,6 +336,7 @@ def collect(con) -> dict[str, ScopeAccum]:
         provider = provider if isinstance(provider, str) else "unknown"
         pre = _int_or_zero(prefix_tokens)
         app = _int_or_zero(append_tokens)
+        cache_write = min(_int_or_zero(cache_write_tokens), app)
         out = _int_or_zero(output_tokens)
         total_input = pre + app
 
@@ -333,13 +355,20 @@ def collect(con) -> dict[str, ScopeAccum]:
             context_growth = max(0, total_input - (previous["total_input"] or 0))
             cf_app = min(app, context_growth)
         cf_pre = total_input - cf_app
+        shifted_from_append = max(0, app - cf_app)
+        cf_cache_write = max(0, cache_write - shifted_from_append)
+        cf_cache_write = min(cf_cache_write, cf_app)
 
         price = pricing.price_for(provider, model)
         observed_cost = counterfactual_cost = None
         cost_reduction_sample = None
         if price is not None:
-            observed_cost = pricing.round_cost(price, pre, app, out)
-            counterfactual_cost = pricing.round_cost(price, cf_pre, cf_app, out)
+            observed_cost = pricing.round_cost(
+                price, pre, app, out, cache_write_tokens=cache_write
+            )
+            counterfactual_cost = pricing.round_cost(
+                price, cf_pre, cf_app, out, cache_write_tokens=cf_cache_write
+            )
             cost_reduction_sample = observed_cost["total"] - counterfactual_cost["total"]
 
         for scope in ("merged", provider):
@@ -505,7 +534,8 @@ def write_latex_table(path: Path, accums: dict[str, ScopeAccum]) -> None:
         "\\caption{Upper-bound append-token and cost savings from eliminating user-thinking-induced",
         "prefix-cache misses. Append after retained cache is capped at context growth for",
         "user-initiated steps; shifted tokens are billed at the cache-read",
-        f"rate using \\texttt{{pricing.json}} prices as of {pricing.PRICING_AS_OF}.}}",
+        "rate, and remaining Claude cache-created append tokens use the 5-minute",
+        "cache-write rate from the provider list prices.}",
         "\\label{tab:human_idle_cache_counterfactual}",
         "\\small",
         "\\setlength{\\tabcolsep}{6pt}",

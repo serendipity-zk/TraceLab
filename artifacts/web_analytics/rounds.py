@@ -25,6 +25,7 @@ class RoundRow(TypedDict):
     round_index: int
     prefix: int
     append: int
+    cache_write: int
     output: int
     reasoning: int
     first_ts_us: Optional[int]
@@ -36,7 +37,7 @@ class RoundRow(TypedDict):
 
 # round_pk is unique; event_index = 1 is exactly one row per round, so the LEFT JOIN keeps every
 # round (ts NULL when it has no timing events). tool call counts come from a grouped child scan.
-_SQL = """
+_SQL_TEMPLATE = """
 WITH first_ev AS (
     SELECT round_pk, CAST(epoch_us(timestamp) AS BIGINT) AS ts_us
     FROM timing_events
@@ -48,7 +49,8 @@ tool_n AS (
     GROUP BY round_pk
 )
 SELECT r.round_pk, r.provider, r.model, r.session_id, r."user", r.round_index,
-       r.prefix_tokens, r.newly_append_tokens, r.output_tokens, r.reasoning_output_tokens,
+       r.prefix_tokens, r.newly_append_tokens, {cache_write_expr},
+       r.output_tokens, r.reasoning_output_tokens,
        r.first_input_event_type, f.ts_us, COALESCE(t.n, 0) AS tool_calls
 FROM rounds r
 LEFT JOIN first_ev f USING (round_pk)
@@ -61,8 +63,27 @@ def _i(value: Any) -> int:
     return int(value) if isinstance(value, (int, float)) else 0
 
 
+def _has_round_column(con, column: str) -> bool:
+    return bool(
+        con.execute(
+            """
+            SELECT count(*) > 0
+            FROM information_schema.columns
+            WHERE table_name = 'rounds' AND column_name = ?
+            """,
+            [column],
+        ).fetchone()[0]
+    )
+
+
 def load_rounds(con) -> list[RoundRow]:
     rows: list[RoundRow] = []
+    cache_write_expr = (
+        "r.claude_cache_creation_input_tokens"
+        if _has_round_column(con, "claude_cache_creation_input_tokens")
+        else "CAST(NULL AS BIGINT) AS claude_cache_creation_input_tokens"
+    )
+    sql = _SQL_TEMPLATE.format(cache_write_expr=cache_write_expr)
     for (
         round_pk,
         provider,
@@ -72,12 +93,13 @@ def load_rounds(con) -> list[RoundRow]:
         round_index,
         prefix,
         append,
+        cache_write,
         output,
         reasoning,
         first_input_event_type,
         ts_us,
         tool_calls,
-    ) in con.execute(_SQL).fetchall():
+    ) in con.execute(sql).fetchall():
         rows.append(
             {
                 "round_pk": int(round_pk),
@@ -88,6 +110,7 @@ def load_rounds(con) -> list[RoundRow]:
                 "round_index": _i(round_index),
                 "prefix": _i(prefix),
                 "append": _i(append),
+                "cache_write": _i(cache_write),
                 "output": _i(output),
                 "reasoning": _i(reasoning),
                 "first_ts_us": int(ts_us) if ts_us is not None else None,

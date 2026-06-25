@@ -7,6 +7,7 @@ import pricingTable from '../../../../../artifacts/utils/pricing.json';
 
 export interface ModelPrice {
   inputPerM: number;
+  cacheWrite5mInputPerM?: number;
   cachedInputPerM: number;
   outputPerM: number;
 }
@@ -24,7 +25,12 @@ export function priceFor(provider: string, model: string | null | undefined): Mo
   if (exact) return exact;
   const m = model.toLowerCase();
   for (const f of FAMILY) {
-    if (m.includes(f.match)) return { inputPerM: f.inputPerM, cachedInputPerM: f.cachedInputPerM, outputPerM: f.outputPerM };
+    if (m.includes(f.match)) return {
+      inputPerM: f.inputPerM,
+      cacheWrite5mInputPerM: f.cacheWrite5mInputPerM,
+      cachedInputPerM: f.cachedInputPerM,
+      outputPerM: f.outputPerM,
+    };
   }
   return null;
 }
@@ -32,12 +38,14 @@ export function priceFor(provider: string, model: string | null | undefined): Mo
 export interface RoundTokens {
   prefixTokens: number;
   appendTokens: number;
+  cacheWriteTokens?: number;
   outputTokens: number;
   reasoningTokens?: number;
 }
 
 export interface RoundCost {
   inputCost: number;
+  cacheWriteCost: number;
   cachedCost: number;
   outputCost: number;
   reasoningCost: number;
@@ -48,11 +56,14 @@ const PER_TOKEN = (perM: number) => perM / 1_000_000;
 
 /** Cost of one round (or a summed bucket) given its token split and a price. */
 export function roundCost(price: ModelPrice, t: RoundTokens): RoundCost {
-  const inputCost = t.appendTokens * PER_TOKEN(price.inputPerM);
+  const writeTokens = Math.max(0, Math.min(t.cacheWriteTokens ?? 0, t.appendTokens));
+  const baseAppendTokens = t.appendTokens - writeTokens;
+  const cacheWriteCost = writeTokens * PER_TOKEN(price.cacheWrite5mInputPerM ?? price.inputPerM);
+  const inputCost = baseAppendTokens * PER_TOKEN(price.inputPerM) + cacheWriteCost;
   const cachedCost = t.prefixTokens * PER_TOKEN(price.cachedInputPerM);
   const outputCost = t.outputTokens * PER_TOKEN(price.outputPerM);
   const reasoningCost = (t.reasoningTokens ?? 0) * PER_TOKEN(price.outputPerM);
-  return { inputCost, cachedCost, outputCost, reasoningCost, total: inputCost + cachedCost + outputCost };
+  return { inputCost, cacheWriteCost, cachedCost, outputCost, reasoningCost, total: inputCost + cachedCost + outputCost };
 }
 
 /** What prefix caching saved vs. billing those cached tokens at the fresh-input rate. */
