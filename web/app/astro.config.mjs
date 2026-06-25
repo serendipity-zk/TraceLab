@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
+import { EXPERIMENTAL_ROUTES } from './src/lib/experimental-routes.mjs';
 
 // Repo root — the web app imports the single-source price table from artifacts/utils/pricing.json,
 // which lives outside the Vite project root, so the dev server must be allowed to read it.
@@ -40,6 +41,12 @@ export default defineConfig({
   // en / zh-CN / x-default alternates already in <head>. robots.txt points crawlers at the index.
   integrations: [
     sitemap({
+      // Experimental routes still emit a (redirect) page in a production build, so explicitly keep
+      // them out of the public sitemap. Path list is the single source in experimental-routes.mjs.
+      filter: (page) => {
+        const path = new URL(page).pathname.replace(/\/$/, '');
+        return !EXPERIMENTAL_ROUTES.some((r) => path === r || path.startsWith(`${r}/`));
+      },
       i18n: {
         defaultLocale: 'en',
         locales: {

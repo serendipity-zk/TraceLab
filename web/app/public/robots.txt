@@ -8,4 +8,8 @@ Disallow: /py/
 Disallow: /data/
 Disallow: /api/
 
+# Experimental routes redirect to home and are kept out of the sitemap; don't index them.
+# Mirror of EXPERIMENTAL_ROUTES in src/lib/experimental-routes.mjs.
+Disallow: /lab
+
 Sitemap: https://tracelab.cs.washington.edu/sitemap-index.xml
