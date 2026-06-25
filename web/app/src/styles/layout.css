@@ -125,6 +125,35 @@
   .hero h1 em { font-style: italic; color: var(--terra); }
   .hero p.lede { font-size: var(--fs-lede); color: var(--muted); max-width: 720px; margin: 0; font-weight: 400; line-height: 1.5; }
 
+  /* ---- overview hero: intro on the left, dataset snapshot on the right ---- */
+  .overview-top {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: 28px 60px;
+    align-items: stretch;     /* both columns share one row height = equal height */
+    padding: 64px 0 34px;
+  }
+  /* hero loses its standalone padding/clamp; it centres within the shared column height */
+  .overview-top .hero { padding: 0; max-width: 540px; display: flex; flex-direction: column; justify-content: center; }
+  /* snapshot fills the same height as the hero; its KPI rows stretch (and compress) to fit */
+  .snapshot-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .snapshot-col .sec-head { margin: 0 0 14px; }
+  /* snapshot KPIs sit two-up beside the hero (the global grid is four-up), and the two
+     stacked grids split the column height so all four rows fill it evenly */
+  .snapshot-col .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: 1fr 1fr;
+    gap: 14px;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  /* compact "snapshot" tiles — shorter than the full-page KPIs so the 2×4 matches hero height */
+  .snapshot-col .kpi { padding: 15px 18px; }
+  .snapshot-col .kpi::before { top: 14px; bottom: 14px; }
+  .snapshot-col .kpi .num { font-size: clamp(28px, 2.5vw, 38px); margin-top: 5px; }
+  .snapshot-col .kpi .num small { font-size: var(--fs-sm); }
+  .snapshot-col .kpi .foot { margin-top: 4px; }
+
   /* project links — icon+label chips */
   .proj-links { display: flex; gap: 12px; }
   .proj-links a {
