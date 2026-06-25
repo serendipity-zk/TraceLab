@@ -38,7 +38,14 @@ def build_per_day(rows: list[RoundRow], tz_offset_min: int) -> list[dict[str, An
         d["outputTokens"] += r["output"]
         price = price_for(r["provider"] or "", r["model"])
         if price is not None:
-            d["costUsd"] += round_cost(price, r["prefix"], r["append"], r["output"], r["reasoning"])["total"]
+            d["costUsd"] += round_cost(
+                price,
+                r["prefix"],
+                r["append"],
+                r["output"],
+                r["reasoning"],
+                cache_write_tokens=r["cache_write"],
+            )["total"]
     return [days[k] for k in sorted(days)]
 
 

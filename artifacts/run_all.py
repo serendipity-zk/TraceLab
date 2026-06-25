@@ -124,6 +124,7 @@ EXPERIMENTS: list[Experiment] = [
     # prefix_cache ---------------------------------------------------------
     Experiment("prefix_cache", "cache_hit_ratio", "prefix_cache/cache_hit_ratio/analyze.py", "-i", "db", after=BUILD_DB_NAME),
     Experiment("prefix_cache", "redundant_prefill", "prefix_cache/redundant_prefill/analyze.py", "-i", "db", after=BUILD_DB_NAME),
+    Experiment("prefix_cache", "human_idle_cache_counterfactual", "prefix_cache/human_idle_cache_counterfactual/analyze.py", "-i", "db", after=BUILD_DB_NAME),
     Experiment("prefix_cache", "cache_hit_idle_relationship/gap", "prefix_cache/cache_hit_idle_relationship/cache_hit_idle_gap_analysis.py", "-i", "db", after=BUILD_DB_NAME),
     Experiment("prefix_cache", "cache_hit_idle_relationship/scatters", "prefix_cache/cache_hit_idle_relationship/plot_user_wait_time_vs_hit_rate.py", "-i", "db", after=BUILD_DB_NAME),
     Experiment("prefix_cache", "cache_replay", "prefix_cache/cache_replay/analyze.py", "--input", "db", after=BUILD_DB_NAME),
@@ -141,6 +142,7 @@ EXPERIMENTS: list[Experiment] = [
     # session --------------------------------------------------------------
     Experiment("session", "session_token_steps", "session/session_token_steps/plot.py", "-i", "db", after=BUILD_DB_NAME),
     Experiment("session", "total_input_growth", "session/total_input_growth/analyze.py", "-i", "db", after=BUILD_DB_NAME),
+    Experiment("session", "session_cost_distribution", "session/session_cost_distribution/analyze.py", "-i", "db", after=BUILD_DB_NAME),
 ]
 
 # Return codes used internally for non-process outcomes.

@@ -1,9 +1,10 @@
 """Cost decomposition by model + provider, from the per-round rows.
 
 Groups rounds by (provider, model), bills each bucket's token split through ``pricing`` (append at
-fresh-input rate, prefix at cache-read rate, output at output rate), and marks unknown models
-*unpriced* rather than guessing. Mirrors ``buildCost`` in lib/mock/analytics.ts so the real payload
-reconciles with the mock. Cost is computed HERE (Python); the frontend only displays the dollars.
+fresh-input/cache-write rates, prefix at cache-read rate, output at output rate), and marks unknown
+models *unpriced* rather than guessing. Mirrors ``buildCost`` in lib/mock/analytics.ts so the real
+payload reconciles with the mock. Cost is computed HERE (Python); the frontend only displays the
+dollars.
 """
 
 from __future__ import annotations
@@ -24,11 +25,12 @@ def build_cost(rows: list[RoundRow]) -> dict[str, Any]:
         b = buckets.get(key)
         if b is None:
             b = {"provider": provider, "model": model, "rounds": 0,
-                 "prefix": 0, "append": 0, "output": 0, "reasoning": 0}
+                 "prefix": 0, "append": 0, "cache_write": 0, "output": 0, "reasoning": 0}
             buckets[key] = b
         b["rounds"] += 1
         b["prefix"] += r["prefix"]
         b["append"] += r["append"]
+        b["cache_write"] += r["cache_write"]
         b["output"] += r["output"]
         b["reasoning"] += r["reasoning"]
 
@@ -43,15 +45,23 @@ def build_cost(rows: list[RoundRow]) -> dict[str, Any]:
         if price is None:
             by_model.append({
                 "provider": b["provider"], "model": b["model"], "rounds": b["rounds"],
-                "inputCost": 0.0, "cachedCost": 0.0, "outputCost": 0.0,
+                "inputCost": 0.0, "cacheWriteCost": 0.0, "cachedCost": 0.0, "outputCost": 0.0,
                 "reasoningCost": 0.0, "costUsd": 0.0, "priced": False,
             })
             unpriced_rounds += b["rounds"]
             continue
-        rc = round_cost(price, b["prefix"], b["append"], b["output"], b["reasoning"])
+        rc = round_cost(
+            price,
+            b["prefix"],
+            b["append"],
+            b["output"],
+            b["reasoning"],
+            cache_write_tokens=b["cache_write"],
+        )
         by_model.append({
             "provider": b["provider"], "model": b["model"], "rounds": b["rounds"],
-            "inputCost": rc["inputCost"], "cachedCost": rc["cachedCost"],
+            "inputCost": rc["inputCost"], "cacheWriteCost": rc["cacheWriteCost"],
+            "cachedCost": rc["cachedCost"],
             "outputCost": rc["outputCost"], "reasoningCost": rc["reasoningCost"],
             "costUsd": rc["total"], "priced": True,
         })

@@ -117,6 +117,7 @@ const HEADLINE_SLUGS = [
   'session/session_cost_distribution',
   'session/session_timing_distribution',
   'prefix_cache/redundant_prefill',
+  'prefix_cache/human_idle_cache_counterfactual',
   'llm_generation/token_length_distribution',
   'llm_generation/append_by_prefix_bin',
   'tool_calls/codex_wall_internal_gap',

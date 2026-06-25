@@ -79,13 +79,13 @@ function buildHourWeekday(): HourWeekday[] {
 const hourWeekday = buildHourWeekday();
 
 // ---- cost by model (computed via real pricing) ----
-const MODEL_SPECS: { provider: string; model: string; rounds: number; prefix: number; append: number; output: number; reasoning: number }[] = [
-  { provider: 'claude', model: 'claude-opus-4-8', rounds: 4200, prefix: 410_000_000, append: 38_000_000, output: 9_400_000, reasoning: 3_100_000 },
-  { provider: 'claude', model: 'claude-opus-4-7', rounds: 1800, prefix: 150_000_000, append: 14_000_000, output: 3_600_000, reasoning: 1_200_000 },
-  { provider: 'claude', model: 'claude-sonnet-4-6', rounds: 2600, prefix: 220_000_000, append: 21_000_000, output: 5_200_000, reasoning: 0 },
-  { provider: 'codex', model: 'gpt-5.5', rounds: 3100, prefix: 180_000_000, append: 26_000_000, output: 7_100_000, reasoning: 2_400_000 },
-  { provider: 'codex', model: 'gpt-5.4', rounds: 900, prefix: 41_000_000, append: 6_500_000, output: 1_900_000, reasoning: 600_000 },
-  { provider: 'codex', model: 'experimental-o5-preview', rounds: 240, prefix: 9_000_000, append: 1_500_000, output: 520_000, reasoning: 0 },
+const MODEL_SPECS: { provider: string; model: string; rounds: number; prefix: number; append: number; cacheWrite: number; output: number; reasoning: number }[] = [
+  { provider: 'claude', model: 'claude-opus-4-8', rounds: 4200, prefix: 410_000_000, append: 38_000_000, cacheWrite: 37_500_000, output: 9_400_000, reasoning: 3_100_000 },
+  { provider: 'claude', model: 'claude-opus-4-7', rounds: 1800, prefix: 150_000_000, append: 14_000_000, cacheWrite: 13_800_000, output: 3_600_000, reasoning: 1_200_000 },
+  { provider: 'claude', model: 'claude-sonnet-4-6', rounds: 2600, prefix: 220_000_000, append: 21_000_000, cacheWrite: 20_700_000, output: 5_200_000, reasoning: 0 },
+  { provider: 'codex', model: 'gpt-5.5', rounds: 3100, prefix: 180_000_000, append: 26_000_000, cacheWrite: 0, output: 7_100_000, reasoning: 2_400_000 },
+  { provider: 'codex', model: 'gpt-5.4', rounds: 900, prefix: 41_000_000, append: 6_500_000, cacheWrite: 0, output: 1_900_000, reasoning: 600_000 },
+  { provider: 'codex', model: 'experimental-o5-preview', rounds: 240, prefix: 9_000_000, append: 1_500_000, cacheWrite: 0, output: 520_000, reasoning: 0 },
 ];
 
 function buildCost() {
@@ -97,12 +97,12 @@ function buildCost() {
   for (const m of MODEL_SPECS) {
     const price = priceFor(m.provider, m.model);
     if (!price) {
-      byModel.push({ provider: m.provider, model: m.model, rounds: m.rounds, inputCost: 0, cachedCost: 0, outputCost: 0, reasoningCost: 0, costUsd: 0, priced: false });
+      byModel.push({ provider: m.provider, model: m.model, rounds: m.rounds, inputCost: 0, cacheWriteCost: 0, cachedCost: 0, outputCost: 0, reasoningCost: 0, costUsd: 0, priced: false });
       unpricedRounds += m.rounds;
       continue;
     }
-    const rc = roundCost(price, { prefixTokens: m.prefix, appendTokens: m.append, outputTokens: m.output, reasoningTokens: m.reasoning });
-    byModel.push({ provider: m.provider, model: m.model, rounds: m.rounds, inputCost: rc.inputCost, cachedCost: rc.cachedCost, outputCost: rc.outputCost, reasoningCost: rc.reasoningCost, costUsd: rc.total, priced: true });
+    const rc = roundCost(price, { prefixTokens: m.prefix, appendTokens: m.append, cacheWriteTokens: m.cacheWrite, outputTokens: m.output, reasoningTokens: m.reasoning });
+    byModel.push({ provider: m.provider, model: m.model, rounds: m.rounds, inputCost: rc.inputCost, cacheWriteCost: rc.cacheWriteCost, cachedCost: rc.cachedCost, outputCost: rc.outputCost, reasoningCost: rc.reasoningCost, costUsd: rc.total, priced: true });
     cacheSavingsUsd += cacheSavings(price, m.prefix);
     reasoningCostUsd += rc.reasoningCost;
     pricedRounds += m.rounds;
@@ -160,7 +160,9 @@ function buildSessions(): SessionRow[] {
     const inputTokens = rounds * intBetween(9000, 24000);
     const outputTokens = rounds * intBetween(450, 1500);
     const price = priceFor(provider, model)!;
-    const costUsd = roundCost(price, { prefixTokens: inputTokens * 0.72, appendTokens: inputTokens * 0.28, outputTokens }).total;
+    const appendTokens = inputTokens * 0.28;
+    const cacheWriteTokens = provider === 'claude' ? appendTokens * 0.98 : 0;
+    const costUsd = roundCost(price, { prefixTokens: inputTokens * 0.72, appendTokens, cacheWriteTokens, outputTokens }).total;
     return {
       sessionId: id, title: SESSION_TITLES[id], provider, primaryModel: model, rounds,
       firstTsUs: usAt(start), lastTsUs: usAt(new Date(start.getTime() + durationS * 1000)),

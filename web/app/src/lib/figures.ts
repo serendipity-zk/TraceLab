@@ -340,6 +340,13 @@ export const overviewFigureSections: FigureSection[] = [
       },
       {
         category: 'prefix_cache',
+        title: 'Cost of human thinking time',
+        blurb: 'Upper-bound savings if user-initiated steps kept their prefix cache.',
+        variant: 'stat',
+        slug: 'prefix_cache/human_idle_cache_counterfactual',
+      },
+      {
+        category: 'prefix_cache',
         title: 'Eviction trade-off',
         blurb: 'Cache hit rate versus storage as the eviction timeout grows.',
         variant: 'figure',

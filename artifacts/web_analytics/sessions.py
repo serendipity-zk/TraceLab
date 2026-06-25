@@ -69,7 +69,12 @@ def build_sessions(con, rows: list[RoundRow]) -> list[dict[str, Any]]:
             price = price_for(r["provider"] or "", r["model"])
             if price is not None:
                 cost_usd += round_cost(
-                    price, r["prefix"], r["append"], r["output"], r["reasoning"]
+                    price,
+                    r["prefix"],
+                    r["append"],
+                    r["output"],
+                    r["reasoning"],
+                    cache_write_tokens=r["cache_write"],
                 )["total"]
 
         starts = [r["first_ts_us"] for r in rs if r["first_ts_us"] is not None]

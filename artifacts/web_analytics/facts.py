@@ -236,7 +236,18 @@ def build_facts(
     max_cost = max_context = max_output = max_reason = max_ratio = None
     for r in rows:
         price = price_for(r["provider"] or "", r["model"])
-        rc = round_cost(price, r["prefix"], r["append"], r["output"], r["reasoning"])["total"] if price else 0.0
+        rc = (
+            round_cost(
+                price,
+                r["prefix"],
+                r["append"],
+                r["output"],
+                r["reasoning"],
+                cache_write_tokens=r["cache_write"],
+            )["total"]
+            if price
+            else 0.0
+        )
         context = r["prefix"] + r["append"]
         if max_cost is None or rc > max_cost[0]:
             max_cost = (rc, r)

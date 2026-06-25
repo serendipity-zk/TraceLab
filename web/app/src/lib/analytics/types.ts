@@ -49,7 +49,8 @@ export interface CostByModel {
   provider: Provider;
   model: string;
   rounds: number;
-  inputCost: number; // newly_append_tokens billed at fresh-input rate
+  inputCost: number; // newly_append_tokens billed at fresh-input/cache-write rates
+  cacheWriteCost?: number; // subset of inputCost from 5-minute cache-write tokens when known
   cachedCost: number; // prefix_tokens billed at cache-read rate
   outputCost: number; // output_tokens (incl. reasoning) billed at output rate
   reasoningCost: number; // subset of outputCost attributable to reasoning tokens

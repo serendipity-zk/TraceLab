@@ -6,6 +6,13 @@
 import Base from '../layouts/Base.astro';
 import Footer from '../components/Footer.astro';
 import AnalyticsDashboard from '../components/AnalyticsDashboard.astro';
+import { redirectIfExperimental } from '../lib/experimental';
+
+// Experimental sandbox: served in `astro dev`, but a production build (the public release)
+// redirects it to home so it never ships. It's also dropped from the sitemap (astro.config.mjs)
+// and disallowed in robots.txt. See src/lib/experimental.ts.
+const gone = redirectIfExperimental(Astro);
+if (gone) return gone;
 ---
 
 <Base title="SyFI TraceLab · Analytics Lab">

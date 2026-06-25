@@ -51,35 +51,40 @@ const localizedCard = (title: string, blurb: string) => fcopy.cards[title] ?? { 
 ---
 
 <section class="surface live" id="overview" role="tabpanel" aria-label={o.aria}>
-  <div class="hero reveal" style="--d:60ms">
-    <span class="eyebrow">{o.eyebrow}</span>
-    <h1>SyFI <em>TraceLab</em></h1>
-    <p class="lede">
-      {o.lede[0]}
-      <br />
-      {o.lede[1]}
-    </p>
+  <div class="overview-top">
+    <div class="hero reveal" style="--d:60ms">
+      <span class="eyebrow">{o.eyebrow}</span>
+      <h1>SyFI <em>TraceLab</em></h1>
+      <p class="lede">
+        {o.lede[0]}
+        <br />
+        {o.lede[1]}
+      </p>
+      <ProjectLinks variant="strip" class="hero-links reveal" style="--d:240ms" />
+    </div>
+
+    <div class="snapshot-col">
+      <div class="sec-head reveal" style="--d:150ms">
+        <h2>{o.snapshot}</h2>
+      </div>
+
+      <KpiGrid delay={200}>
+        <Kpi label={o.kpis.users} value={intComma(m.scope.distinct_users)} accent="sage" />
+        <Kpi label={o.kpis.sessions} value={intComma(m.scope.total_sessions)} accent="sage" />
+        <Kpi label={o.kpis.steps} value={intComma(rounds)} accent="gold" />
+        {/* foot hidden for now — restore: <Kpi label={o.kpis.steps} value={intComma(rounds)} foot={o.kpis.stepsFoot} accent="gold" /> */}
+        <Kpi label={o.kpis.tools} value={intComma(m.tools.total_tool_calls)} accent="sage" />
+      </KpiGrid>
+
+      <KpiGrid delay={260} mt>
+        <Kpi label={o.kpis.input} value={totalInput.num} unit={totalInput.unit} feature />
+        <Kpi label={o.kpis.cached} value={cached.num} unit={cached.unit} accent="terra" />
+        {/* foot hidden for now — restore: <Kpi label={o.kpis.cached} value={cached.num} unit={cached.unit} foot={`${cachedShare}% ${o.kpis.cachedFoot}`} accent="terra" /> */}
+        <Kpi label={o.kpis.append} value={newIn.num} unit={newIn.unit} accent="terra" />
+        <Kpi label={o.kpis.output} value={totalOutput.num} unit={totalOutput.unit} accent="terra" />
+      </KpiGrid>
+    </div>
   </div>
-
-  <ProjectLinks variant="strip" class="link-strip reveal" style="--d:150ms" />
-
-  <div class="sec-head reveal" style="--d:190ms">
-    <h2>{o.snapshot}</h2>
-  </div>
-
-  <KpiGrid delay={240}>
-    <Kpi label={o.kpis.users} value={intComma(m.scope.distinct_users)} accent="sage" />
-    <Kpi label={o.kpis.sessions} value={intComma(m.scope.total_sessions)} accent="sage" />
-    <Kpi label={o.kpis.steps} value={intComma(rounds)} foot={o.kpis.stepsFoot} accent="gold" />
-    <Kpi label={o.kpis.tools} value={intComma(m.tools.total_tool_calls)} accent="sage" />
-  </KpiGrid>
-
-  <KpiGrid delay={300} mt>
-    <Kpi label={o.kpis.input} value={totalInput.num} unit={totalInput.unit} feature />
-    <Kpi label={o.kpis.cached} value={cached.num} unit={cached.unit} foot={`${cachedShare}% ${o.kpis.cachedFoot}`} accent="terra" />
-    <Kpi label={o.kpis.append} value={newIn.num} unit={newIn.unit} accent="terra" />
-    <Kpi label={o.kpis.output} value={totalOutput.num} unit={totalOutput.unit} accent="terra" />
-  </KpiGrid>
 
   <Band delay={360}>
     <Panel title={o.providerSplit} desc={o.providerSplitDesc.replace('{rounds}', intComma(rounds))}>
