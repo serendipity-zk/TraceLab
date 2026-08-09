@@ -170,12 +170,23 @@ def load_tool_wait_by_round(con, latency_source: str) -> dict[int, ToolWaitAgg]:
     return agg
 
 
+SessionKey = tuple[str, str, str]
+
+
 def load_sessions(
     con,
     provider: str,
     stats: ConvertStats,
-) -> "OrderedDict[str, list[tuple[int, dict[str, Any]]]]":
-    """Group rounds by session_id, preserving first-seen (file-order) session order.
+) -> "OrderedDict[SessionKey, list[tuple[int, dict[str, Any]]]]":
+    """Group rounds by session, preserving first-seen (file-order) session order.
+
+    The grouping key is ``(project, session_file, session_id)``, not ``session_id``
+    alone. ``session_id`` is not unique in the source: 16 ids in the public trace
+    span more than one session file (1,216 rounds), and ``(session_id, round_index)``
+    has 514 duplicates — see ``artifacts/utils/DB_SCHEMA.md``. Grouping on the id
+    alone merges unrelated conversations, interleaves their rounds by
+    ``round_index``, and then hides the merge behind the contiguous ``round_idx``
+    this converter re-derives, yielding a prefix chain that never existed.
 
     Rounds are pulled ``ORDER BY ingest_seq`` (== file order == old line order), so the
     first-appearance session order and the per-session row order both match the JSONL
@@ -183,17 +194,19 @@ def load_sessions(
     (the trace has no blank lines, and it is only ever used as a sort tie-break, where
     only the relative order — identical to file order — matters).
     """
-    sessions: "OrderedDict[str, list[tuple[int, dict[str, Any]]]]" = OrderedDict()
+    sessions: "OrderedDict[SessionKey, list[tuple[int, dict[str, Any]]]]" = OrderedDict()
     for (
         round_pk,
         row_provider,
+        project,
+        session_file,
         session_id,
         round_index,
         newly_append_tokens,
         prefix_tokens,
         output_tokens,
     ) in con.execute(
-        "SELECT round_pk, provider, session_id, round_index, "
+        "SELECT round_pk, provider, project, session_file, session_id, round_index, "
         "newly_append_tokens, prefix_tokens, output_tokens "
         "FROM rounds ORDER BY ingest_seq"
     ).fetchall():
@@ -212,7 +225,8 @@ def load_sessions(
             "output_tokens": output_tokens,
             "round_pk": round_pk,
         }
-        sessions.setdefault(session_id, []).append((round_pk, row))
+        session_key: SessionKey = (project or "", session_file or "", session_id)
+        sessions.setdefault(session_key, []).append((round_pk, row))
     stats.sessions_seen = len(sessions)
     return sessions
 
