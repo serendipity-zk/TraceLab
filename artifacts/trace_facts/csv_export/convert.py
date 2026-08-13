@@ -188,12 +188,24 @@ def load_sessions(
     ``round_index``, and then hides the merge behind the contiguous ``round_idx``
     this converter re-derives, yielding a prefix chain that never existed.
 
+    ``session_file`` is present in some traces and absent in others (the same
+    reason ``cache_replay/analyze.py`` projects it defensively), so it is
+    selected only when the table has it. Without it the key degrades to
+    ``(project, session_id)`` — still strictly narrower than the id alone.
+
     Rounds are pulled ``ORDER BY ingest_seq`` (== file order == old line order), so the
     first-appearance session order and the per-session row order both match the JSONL
     loader byte-for-byte. ``round_pk`` plays the role of the old 1-based line number
     (the trace has no blank lines, and it is only ever used as a sort tie-break, where
     only the relative order — identical to file order — matters).
     """
+    has_session_file = bool(
+        con.execute(
+            "SELECT count(*) > 0 FROM information_schema.columns "
+            "WHERE table_name = 'rounds' AND column_name = 'session_file'"
+        ).fetchone()[0]
+    )
+    session_file_column = "session_file" if has_session_file else "CAST(NULL AS VARCHAR)"
     sessions: "OrderedDict[SessionKey, list[tuple[int, dict[str, Any]]]]" = OrderedDict()
     for (
         round_pk,
@@ -206,7 +218,7 @@ def load_sessions(
         prefix_tokens,
         output_tokens,
     ) in con.execute(
-        "SELECT round_pk, provider, project, session_file, session_id, round_index, "
+        f"SELECT round_pk, provider, project, {session_file_column}, session_id, round_index, "
         "newly_append_tokens, prefix_tokens, output_tokens "
         "FROM rounds ORDER BY ingest_seq"
     ).fetchall():
