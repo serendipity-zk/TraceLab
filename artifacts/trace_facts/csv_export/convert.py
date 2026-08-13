@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
-"""Convert the normalized coding-trace into a multi-round CSV trace.
+"""Export the normalized coding-trace as a multi-round CSV.
 
 Source rows are LLM rounds in the shared trace DuckDB (one round per ``rounds``
-row; see ``artifacts/utils/DB_SCHEMA.md``). Output uses the canonical multi-round
-trace columns:
+row; see ``artifacts/utils/DB_SCHEMA.md``). Output is the ``session-rounds-v2``
+schema:
 
-    id,input_len,output_len,arrival_time,round_idx,tool_wait_after_ms,prefix_len
+    session_id,round_idx,input_len,output_len,prefix_len,tool_wait_after_ms
 
 Mapping:
 
+    session_id         = contiguous 0..N ordinal, in source (ingest_seq) order
+    round_idx          = contiguous 0..N within each emitted session
     input_len          = max(newly_append_tokens, 1)
     prefix_len         = max(prefix_tokens, 0)
     output_len         = max(output_tokens, 1)
-    round_idx          = contiguous 0..N within each emitted session
-    arrival_time       = synthetic session arrival time in milliseconds
     tool_wait_after_ms = summed tool latency after the round, 0 on final round
 
 By default, tool wait uses trace-observed wall latency (`tool_wall_latency_ms`).
 
+**This is an export, not a workload.** It reports what the corpus contains and
+nothing else. There is no arrival timeline here because the corpus has none:
+session arrival times are synthetic, and inventing them is a workload-shaping
+decision that belongs with the tool that materializes a replayable trace, next
+to the other shaping decisions and recorded in one manifest beside its output.
+Capping and reordering sessions moved out for the same reason. Consequently
+this exporter is fully deterministic: same DuckDB in, same bytes out, no seed.
+
 I/O is the shared layer (`trace_db.add_db_args`): pass a prebuilt `--db`, or `-i`
 a normalized JSONL trace (materialized to a temp DuckDB). `-o` is the output CSV.
-Rounds are pulled in file order (`ORDER BY ingest_seq`) so the seeded synthetic
-arrival times reproduce the pre-DuckDB JSONL path byte-for-byte.
+Rounds are pulled in file order (`ORDER BY ingest_seq`), so session order and
+per-session round order both match the source byte-for-byte.
 """
 
 from __future__ import annotations
@@ -35,8 +43,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 EXP_DIR = Path(__file__).resolve().parent
 REPO_ROOT = EXP_DIR.parents[2]  # experiment -> category -> artifacts -> repo root
 sys.path.insert(0, str(REPO_ROOT / "artifacts" / "utils"))
@@ -44,14 +50,15 @@ sys.path.insert(0, str(REPO_ROOT / "artifacts" / "utils"))
 import trace_db  # noqa: E402
 
 
+SCHEMA_NAME = "session-rounds-v2"
+
 TRACE_FIELDS = [
-    "id",
+    "session_id",
+    "round_idx",
     "input_len",
     "output_len",
-    "arrival_time",
-    "round_idx",
-    "tool_wait_after_ms",
     "prefix_len",
+    "tool_wait_after_ms",
 ]
 
 
@@ -92,31 +99,6 @@ def int_at_least(value: Any, minimum: int, field_name: str) -> int:
     if number is None:
         raise ValueError(f"missing or invalid {field_name}: {value!r}")
     return max(int(number), minimum)
-
-
-def poisson_arrivals(n: int, rate_rps: float, seed: int) -> list[float]:
-    if n <= 0:
-        return []
-    if rate_rps <= 0:
-        raise ValueError(f"arrival rate must be positive, got {rate_rps}")
-    if n == 1:
-        return [0.0]
-    rng = np.random.default_rng(seed)
-    rate_per_ms = rate_rps / 1000.0
-    inter_arrivals = rng.exponential(1.0 / rate_per_ms, size=n - 1)
-    times = np.empty(n)
-    times[0] = 0.0
-    np.cumsum(inter_arrivals, out=times[1:])
-    return times.tolist()
-
-
-def constant_arrivals(n: int, rate_rps: float) -> list[float]:
-    if n <= 0:
-        return []
-    if rate_rps <= 0:
-        raise ValueError(f"arrival rate must be positive, got {rate_rps}")
-    interval_ms = 1000.0 / rate_rps
-    return [index * interval_ms for index in range(n)]
 
 
 # Per-round tool wait, aggregated in SQL so we don't fetch one Python row per tool.
@@ -304,49 +286,19 @@ def build_session_rounds(
     return rounds
 
 
-def ordered_items(
-    items: list[Any],
-    *,
-    seed: int,
-    max_sessions: int | None,
-    order: str,
-) -> list[Any]:
-    if order == "stable":
-        ordered = list(items)
-    elif order == "shuffle":
-        rng = np.random.default_rng(seed)
-        perm = rng.permutation(len(items))
-        ordered = [items[int(index)] for index in perm]
-    else:
-        raise ValueError(f"unsupported session order: {order}")
-    return ordered[:max_sessions] if max_sessions is not None else ordered
-
-
 def generate_trace(
     con,
     output_path: Path,
     *,
-    arrival_rate: float,
-    arrival_pattern: str,
-    seed: int,
     provider: str,
-    max_sessions: int | None,
-    session_order: str,
     latency_source: str,
 ) -> ConvertStats:
     stats = ConvertStats()
     tool_wait_by_round = load_tool_wait_by_round(con, latency_source)
     raw_sessions = load_sessions(con, provider, stats)
 
-    emitted_raw_sessions = ordered_items(
-        list(raw_sessions.values()),
-        seed=seed,
-        max_sessions=max_sessions,
-        order=session_order,
-    )
-
     built_sessions: list[list[dict[str, Any]]] = []
-    for rows in emitted_raw_sessions:
+    for rows in raw_sessions.values():
         rounds = build_session_rounds(
             rows, tool_wait_by_round=tool_wait_by_round, stats=stats
         )
@@ -356,15 +308,8 @@ def generate_trace(
     if not built_sessions:
         raise SystemExit("No sessions to emit. Check --provider and input file.")
 
-    if arrival_pattern == "poisson":
-        arrivals = poisson_arrivals(len(built_sessions), arrival_rate, seed + 1)
-    elif arrival_pattern == "constant":
-        arrivals = constant_arrivals(len(built_sessions), arrival_rate)
-    else:
-        raise ValueError(f"unsupported arrival pattern: {arrival_pattern}")
-
     trace_rows: list[dict[str, Any]] = []
-    for session_id, (arrival_ms, rounds) in enumerate(zip(arrivals, built_sessions)):
+    for session_id, rounds in enumerate(built_sessions):
         logical_prefix = 0
         had_compaction = False
         for round_idx, round_ in enumerate(rounds):
@@ -376,13 +321,12 @@ def generate_trace(
             stats.total_tool_wait_ms += round_["tool_wait_after_ms"]
             trace_rows.append(
                 {
-                    "id": session_id,
+                    "session_id": session_id,
+                    "round_idx": round_idx,
                     "input_len": round_["input_len"],
                     "output_len": round_["output_len"],
-                    "arrival_time": f"{arrival_ms:.6f}",
-                    "round_idx": round_idx,
-                    "tool_wait_after_ms": f"{round_['tool_wait_after_ms']:.6f}",
                     "prefix_len": round_["prefix_len"],
+                    "tool_wait_after_ms": f"{round_['tool_wait_after_ms']:.6f}",
                 }
             )
         if had_compaction:
@@ -431,35 +375,10 @@ def parse_args() -> argparse.Namespace:
         help="Output trace CSV path.",
     )
     parser.add_argument(
-        "--arrival-rate",
-        type=float,
-        default=1.0,
-        help="Synthetic session arrival rate in sessions/s.",
-    )
-    parser.add_argument(
-        "--arrival-pattern",
-        choices=["poisson", "constant"],
-        default="poisson",
-        help="Synthetic session arrival process.",
-    )
-    parser.add_argument("--seed", type=int, default=0, help="Random seed.")
-    parser.add_argument(
         "--provider",
         choices=["claude", "codex", "all"],
         default="all",
         help="Keep only sessions from this provider.",
-    )
-    parser.add_argument(
-        "--max-sessions",
-        type=int,
-        default=None,
-        help="Cap the number of sessions emitted.",
-    )
-    parser.add_argument(
-        "--session-order",
-        choices=["shuffle", "stable"],
-        default="shuffle",
-        help="Shuffle sessions before assigning synthetic arrivals, or preserve input order.",
     )
     parser.add_argument(
         "--tool-latency-source",
@@ -475,21 +394,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if args.arrival_rate <= 0:
-        raise SystemExit(f"--arrival-rate must be positive, got {args.arrival_rate}")
-    if args.max_sessions is not None and args.max_sessions <= 0:
-        raise SystemExit(f"--max-sessions must be positive, got {args.max_sessions}")
 
     con = trace_db.open_from_args(args)
     stats = generate_trace(
         con,
         output_path=args.output,
-        arrival_rate=args.arrival_rate,
-        arrival_pattern=args.arrival_pattern,
-        seed=args.seed,
         provider=args.provider,
-        max_sessions=args.max_sessions,
-        session_order=args.session_order,
         latency_source=args.tool_latency_source,
     )
     print(
