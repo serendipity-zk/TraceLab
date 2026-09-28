@@ -42,7 +42,7 @@ Provider mappings:
 - Claude `prefix_tokens` comes from `cache_read_input_tokens`.
 - Claude `newly_append_tokens` comes from `input_tokens + cache_creation_input_tokens`.
 - Claude `input_tokens_total` is `cache_read_input_tokens + cache_creation_input_tokens + input_tokens`.
-- Claude rows also keep the provider-specific split as `claude_uncached_input_tokens`, `claude_cache_creation_input_tokens`, and `claude_cache_read_input_tokens`.
+- Claude rows also keep the provider-specific split as `claude_uncached_input_tokens`, `claude_cache_creation_input_tokens`, and `claude_cache_read_input_tokens`, plus `claude_cache_creation_1h_input_tokens` (the 1-hour-TTL part of the cache write; null when the record has no TTL split).
 - Claude `reasoning_output_tokens` is normally `null` because Claude examples do not expose a separate reasoning-token field in this schema.
 - Codex `prefix_tokens` comes from `cached_input_tokens`.
 - Codex `newly_append_tokens` is `input_tokens - cached_input_tokens`, clamped at zero by the extractor.

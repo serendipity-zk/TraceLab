@@ -20,8 +20,10 @@ prefix_after_retained_cache(S)  = total_input(S) - append_after_retained_cache(S
 
 All other steps keep their observed `prefix_tokens` / `newly_append_tokens` split. The total input
 length and output tokens do not change. Any append-token reduction is moved into prefix tokens and
-billed at the cache-read price; remaining Claude cache-creation tokens are billed at the 5-minute
-cache-write rate. Because the estimate assumes all shifted tokens can be served from cache at the
+billed at the cache-read price; remaining Claude cache-creation tokens are billed at the 5-minute /
+1-hour cache-write rates, keeping the step's observed mix of the two (a trace without the 1-hour split, such
+as v0.0.2, bills every write at the 5-minute rate, and the LaTeX caption says so). Because the estimate assumes
+all shifted tokens can be served from cache at the
 cache-read rate, the resulting savings are an upper bound rather than an achievable policy
 guarantee.
 

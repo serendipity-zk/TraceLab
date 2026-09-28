@@ -109,9 +109,14 @@ def collect(con) -> tuple[dict[str, dict[str, list[dict]]], dict[str, int]]:
         if _has_round_column(con, "claude_cache_creation_input_tokens")
         else "CAST(NULL AS BIGINT) AS claude_cache_creation_input_tokens"
     )
+    cache_write_1h_expr = (
+        "CAST(claude_cache_creation_1h_input_tokens AS BIGINT)"
+        if _has_round_column(con, "claude_cache_creation_1h_input_tokens")
+        else "CAST(NULL AS BIGINT)"
+    )
     rows = con.execute(
         "SELECT round_pk, provider, model, session_id, prefix_tokens, newly_append_tokens, "
-        f"{cache_write_expr}, output_tokens FROM rounds ORDER BY round_pk"
+        f"{cache_write_expr}, {cache_write_1h_expr}, output_tokens FROM rounds ORDER BY round_pk"
     ).fetchall()
 
     units: dict[str, dict[str, list[dict]]] = {
@@ -131,7 +136,7 @@ def collect(con) -> tuple[dict[str, dict[str, list[dict]]], dict[str, int]]:
             if scope in units:
                 units[scope]["request"].append(turn["acc"])
 
-    for rpk, prov, model, sid, pre, app, cache_write, out in rows:
+    for rpk, prov, model, sid, pre, app, cache_write, cache_write_1h, out in rows:
         sid = sid if isinstance(sid, str) and sid else None
         events = events_by_round.get(rpk, [])
         start = DEC.response_trigger_user_message_timestamp(events)
@@ -147,7 +152,8 @@ def collect(con) -> tuple[dict[str, dict[str, list[dict]]], dict[str, int]]:
             pre, app, out = int(pre or 0), int(app or 0), int(out or 0)
             cache_write = int(cache_write or 0)
             rc = pricing.round_cost(
-                price, pre, app, out, cache_write_tokens=cache_write
+                price, pre, app, out, cache_write_tokens=cache_write,
+                cache_write_1h_tokens=int(cache_write_1h or 0),
             )
             pc = rc["cachedCost"]
             ac = rc["inputCost"]

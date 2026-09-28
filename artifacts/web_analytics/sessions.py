@@ -75,6 +75,7 @@ def build_sessions(con, rows: list[RoundRow]) -> list[dict[str, Any]]:
                     r["output"],
                     r["reasoning"],
                     cache_write_tokens=r["cache_write"],
+                    cache_write_1h_tokens=r["cache_write_1h"],
                 )["total"]
 
         starts = [r["first_ts_us"] for r in rs if r["first_ts_us"] is not None]

@@ -395,7 +395,11 @@ input_tokens_total = prefix_tokens + newly_append_tokens
 `claude_cache_creation_input_tokens` is emitted after `newly_append_tokens`. For Claude
 rows it is copied from `usage.cache_creation_input_tokens`; for Codex rows it is `null`.
 `newly_append_tokens` still includes both Claude uncached `input_tokens` and Claude
-cache-write tokens.
+cache-write tokens. `claude_cache_creation_1h_input_tokens` is the part of the cache write made
+with the 1-hour TTL (`usage.cache_creation.ephemeral_1h_input_tokens`, billed at a higher rate
+than 5-minute writes); the rest of `claude_cache_creation_input_tokens` is 5-minute writes. It is
+`null` for Codex rows and for Claude records without the TTL split, which are priced as 5-minute
+writes.
 
 See [`docs/prompt_cache_accounting.md`](docs/prompt_cache_accounting.md) for the full
 prompt-cache accounting derivation.

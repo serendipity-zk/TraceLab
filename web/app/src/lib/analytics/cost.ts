@@ -8,6 +8,7 @@ import pricingTable from '../../../../../artifacts/utils/pricing.json';
 export interface ModelPrice {
   inputPerM: number;
   cacheWrite5mInputPerM?: number;
+  cacheWrite1hInputPerM?: number;
   cachedInputPerM: number;
   outputPerM: number;
 }
@@ -28,6 +29,7 @@ export function priceFor(provider: string, model: string | null | undefined): Mo
     if (m.includes(f.match)) return {
       inputPerM: f.inputPerM,
       cacheWrite5mInputPerM: f.cacheWrite5mInputPerM,
+      cacheWrite1hInputPerM: f.cacheWrite1hInputPerM,
       cachedInputPerM: f.cachedInputPerM,
       outputPerM: f.outputPerM,
     };
@@ -39,6 +41,8 @@ export interface RoundTokens {
   prefixTokens: number;
   appendTokens: number;
   cacheWriteTokens?: number;
+  /** 1-hour-TTL part of cacheWriteTokens; the rest is billed as 5-minute writes. */
+  cacheWrite1hTokens?: number;
   outputTokens: number;
   reasoningTokens?: number;
 }
@@ -58,7 +62,10 @@ const PER_TOKEN = (perM: number) => perM / 1_000_000;
 export function roundCost(price: ModelPrice, t: RoundTokens): RoundCost {
   const writeTokens = Math.max(0, Math.min(t.cacheWriteTokens ?? 0, t.appendTokens));
   const baseAppendTokens = t.appendTokens - writeTokens;
-  const cacheWriteCost = writeTokens * PER_TOKEN(price.cacheWrite5mInputPerM ?? price.inputPerM);
+  const write1hTokens = Math.max(0, Math.min(t.cacheWrite1hTokens ?? 0, writeTokens));
+  const writeRate = price.cacheWrite5mInputPerM ?? price.inputPerM;
+  const cacheWriteCost =
+    (writeTokens - write1hTokens) * PER_TOKEN(writeRate) + write1hTokens * PER_TOKEN(price.cacheWrite1hInputPerM ?? writeRate);
   const inputCost = baseAppendTokens * PER_TOKEN(price.inputPerM) + cacheWriteCost;
   const cachedCost = t.prefixTokens * PER_TOKEN(price.cachedInputPerM);
   const outputCost = t.outputTokens * PER_TOKEN(price.outputPerM);

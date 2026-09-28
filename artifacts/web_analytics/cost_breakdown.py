@@ -25,12 +25,14 @@ def build_cost(rows: list[RoundRow]) -> dict[str, Any]:
         b = buckets.get(key)
         if b is None:
             b = {"provider": provider, "model": model, "rounds": 0,
-                 "prefix": 0, "append": 0, "cache_write": 0, "output": 0, "reasoning": 0}
+                 "prefix": 0, "append": 0, "cache_write": 0, "cache_write_1h": 0,
+                 "output": 0, "reasoning": 0}
             buckets[key] = b
         b["rounds"] += 1
         b["prefix"] += r["prefix"]
         b["append"] += r["append"]
         b["cache_write"] += r["cache_write"]
+        b["cache_write_1h"] += r["cache_write_1h"]
         b["output"] += r["output"]
         b["reasoning"] += r["reasoning"]
 
@@ -57,6 +59,7 @@ def build_cost(rows: list[RoundRow]) -> dict[str, Any]:
             b["output"],
             b["reasoning"],
             cache_write_tokens=b["cache_write"],
+            cache_write_1h_tokens=b["cache_write_1h"],
         )
         by_model.append({
             "provider": b["provider"], "model": b["model"], "rounds": b["rounds"],

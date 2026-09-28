@@ -22,7 +22,9 @@ cache, latency, and tool-use analysis:
 - Token accounting: `input_tokens_total`, `prefix_tokens`,
   `newly_append_tokens`, `output_tokens`, `reasoning_output_tokens`, and the
   Claude-specific `claude_uncached_input_tokens`,
-  `claude_cache_creation_input_tokens`, and `claude_cache_read_input_tokens`.
+  `claude_cache_creation_input_tokens` (with its 1-hour part
+  `claude_cache_creation_1h_input_tokens`; the example files here predate it), and
+  `claude_cache_read_input_tokens`.
 - Current-input size summaries: `current_input_event_count`,
   `current_user_message_count`, `current_tool_result_count`,
   `current_user_message_chars`, `current_tool_result_chars`,

@@ -244,6 +244,7 @@ def build_facts(
                 r["output"],
                 r["reasoning"],
                 cache_write_tokens=r["cache_write"],
+                cache_write_1h_tokens=r["cache_write_1h"],
             )["total"]
             if price
             else 0.0
