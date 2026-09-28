@@ -131,8 +131,10 @@ Reviewed as of: `{table.get("as_of", "unknown")}`
 
 Prices are USD per 1,000,000 tokens. Resolve prices by exact key `provider:model` first, then by
 lowercase substring match against `family[].match`; if neither matches, mark the rows unpriced
-rather than guessing. `cachedInputPerM` is the cache-read rate. `cacheWrite5mInputPerM`, when
-present, is the 5-minute cache-write rate; otherwise cache-write tokens use `inputPerM`.
+rather than guessing. An exact key whose value is null is unpriced too (no public API price), and
+the family match does not apply to it. `cachedInputPerM` is the cache-read rate.
+`cacheWrite5mInputPerM`, when present, is the 5-minute cache-write rate; otherwise cache-write
+tokens use `inputPerM`.
 `cacheWrite1hInputPerM`, when present, is the 1-hour cache-write rate, applied to
 `claude_cache_creation_1h_input_tokens` (the 1-hour part of the cache write; null means no TTL
 split was recorded, so the whole write is billed at the 5-minute rate).

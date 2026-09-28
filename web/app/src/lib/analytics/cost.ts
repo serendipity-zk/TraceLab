@@ -16,13 +16,16 @@ export interface ModelPrice {
 /** When the prices in pricing.json were last reviewed — surface near any cost number as a disclaimer. */
 export const PRICING_AS_OF: string = (pricingTable as { as_of: string }).as_of;
 
-const EXACT = pricingTable.exact as Record<string, ModelPrice>;
+// A null exact entry is a model with no public API price: unpriced, and no family default applies.
+const EXACT = pricingTable.exact as unknown as Record<string, ModelPrice | null>;
 const FAMILY = pricingTable.family as ({ match: string } & ModelPrice)[];
 
 /** Look up a price for (provider, model). Returns null when truly unknown (caller marks unpriced). */
 export function priceFor(provider: string, model: string | null | undefined): ModelPrice | null {
   if (!model) return null;
-  const exact = EXACT[`${provider}:${model}`];
+  const key = `${provider}:${model}`;
+  if (key in EXACT && EXACT[key] === null) return null;
+  const exact = EXACT[key];
   if (exact) return exact;
   const m = model.toLowerCase();
   for (const f of FAMILY) {
