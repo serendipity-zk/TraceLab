@@ -372,7 +372,11 @@ timing list, and nested tool metadata.
   cache-prefix split, source store, `timing_events`, and `trace_key`.
 - `timing_events[]` is the ordered trace-observed event list for the round. It may include
   `user_message`, `tool_result`, `reasoning`, `text`, `tool_call`, and Codex
-  `usage_report` entries.
+  `usage_report` entries. Each event's `source` names the raw record it was read from. A Codex
+  prompt comes from `event_msg.user_message`, or from `event_msg.item_completed` (a `UserMessage`
+  item), which is how the main thread of Codex CLI 0.147 and later writes it. Automatic-review
+  rollouts wrote `user_message` up to CLI 0.156; from 0.158 most carry the review request only as a
+  `role = user` `response_item`, which is not read (injected context has the same shape).
 - Private extracted traces include serialized tool `input`; sanitized public traces remove
   `tools[].input` and keep only `input_chars`.
 - `tools[]` includes `tool_name`, `tool_call_id`, `emitted_at`, `input_chars`,
