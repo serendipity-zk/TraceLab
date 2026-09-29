@@ -121,13 +121,27 @@ async function fetchManifest(): Promise<Manifest> {
   }
 }
 
-/** Idempotent, incremental package load — only fetches packages not already loaded by this worker. */
+/** Idempotent, incremental package load — only fetches packages not already loaded by this worker.
+ *  `loadPackage` logs a failed download and resolves anyway, so check which requested packages loaded,
+ *  retry the rest once, and otherwise fail with a clear message instead of a ModuleNotFoundError later
+ *  on. Only the requested names are checked, not their dependencies (e.g. matplotlib's). */
 async function ensurePackages(pyodide: any, packages: string[]): Promise<void> {
   const need = packages.filter((p) => !loadedPackages.has(p));
   if (!need.length) return;
   post({ type: 'boot-progress', message: `Loading ${pkgLabel(need)}…` });
-  await pyodide.loadPackage(need);
-  need.forEach((p) => loadedPackages.add(p));
+  const isLoaded = (p: string) =>
+    Object.keys(pyodide.loadedPackages).some((k) => k.toLowerCase() === p.toLowerCase());
+  let missing = need;
+  for (let attempt = 0; attempt < 2 && missing.length; attempt++) {
+    await pyodide.loadPackage(missing);
+    missing = missing.filter((p) => !isLoaded(p));
+  }
+  need.filter((p) => !missing.includes(p)).forEach((p) => loadedPackages.add(p));
+  if (missing.length) {
+    throw new Error(
+      `Could not download the Pyodide package(s) ${missing.join(', ')}. Check the connection and try again.`,
+    );
+  }
 }
 
 let rendererPrimed = false;
@@ -514,7 +528,7 @@ trace_db.materialize(__mat_src, __p)
 // by the *sanitized* trace_key, matching the payload) and serve subsequent lookups from memory. The
 // map is dropped on the next prepare (see the wipe above) and never built unless a round is opened.
 async function getRoundRawFromPrepare(requestId: string, traceKey: string): Promise<void> {
-  const pyodide = await boot();
+  const pyodide = await boot([]); // reads JSON only: no packages (and no plotting stack) needed
   pyodide.globals.set('__raw_path', ROUND_RAW_PATH);
   pyodide.globals.set('__raw_key', traceKey);
   let rawJson: string;
@@ -743,6 +757,19 @@ json.dumps({
   post({ type: 'qa-tool-result', requestId, result: JSON.parse(raw) });
 }
 
+// The handlers that pass their arguments through interpreter globals (and delete them when done) must
+// not overlap. runPythonAsync runs the code as a coroutine on Pyodide's event loop, so the worker handles
+// queued messages before the code starts and again after it ends: a second request would overwrite the
+// first one's globals, and the first one's cleanup would then delete them (NameError: name '__qa_out'
+// is not defined). A new prepare would also remove the files a raw lookup is about to read. Run them one
+// at a time.
+let pythonRuns: Promise<void> = Promise.resolve();
+function serialized(run: () => Promise<void>): Promise<void> {
+  const next = pythonRuns.then(run);
+  pythonRuns = next.catch(() => {});
+  return next;
+}
+
 ctx.onmessage = async (e: MessageEvent<MainMsg>) => {
   const msg = e.data;
   // Frames carrying a requestId (prepare/qa-*) get it echoed on any error so the awaiting
@@ -752,15 +779,15 @@ ctx.onmessage = async (e: MessageEvent<MainMsg>) => {
     if (msg.type === 'boot') {
       await boot(msg.packages);
     } else if (msg.type === 'prepare') {
-      await prepareTrace(msg.requestId, msg.bytes, msg.filename, msg.buildDb, msg.trusted);
+      await serialized(() => prepareTrace(msg.requestId, msg.bytes, msg.filename, msg.buildDb, msg.trusted));
     } else if (msg.type === 'prepare-get-raw') {
-      await getRoundRawFromPrepare(msg.requestId, msg.traceKey);
+      await serialized(() => getRoundRawFromPrepare(msg.requestId, msg.traceKey));
     } else if (msg.type === 'prime-duckdb') {
       await primeDuckdb(msg.requestId, msg.sanitizedGz, msg.dbGz);
     } else if (msg.type === 'qa-load-trace') {
-      await loadTraceForQa(msg.requestId, msg.bytes, msg.gzip, msg.filename, msg.packages);
+      await serialized(() => loadTraceForQa(msg.requestId, msg.bytes, msg.gzip, msg.filename, msg.packages));
     } else if (msg.type === 'qa-run-python') {
-      await runQaPython(msg.requestId, msg.code, msg.packages);
+      await serialized(() => runQaPython(msg.requestId, msg.code, msg.packages));
     } else if (msg.type === 'analyze') {
       await analyze(msg.bytes, msg.gzip, {
         shardIndex: msg.shardIndex,
