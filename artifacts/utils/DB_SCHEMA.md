@@ -156,7 +156,9 @@ rows = con.execute("SELECT provider, count(*) FROM rounds GROUP BY 1").fetchall(
     duckdb-wasm leaves them `VARCHAR`. So `materialize()` pins timestamp columns explicitly via
     `_ts()` (round-trip through VARCHAR, strip ISO `T`/`Z`) — identical naive microsecond
     `TIMESTAMP` on both engines. Don't rely on inference for any typed column; pin it (see also
-    `reasoning_output_tokens` → BIGINT).
+    `reasoning_output_tokens` → BIGINT). A typed field that is null in every row, or holds mixed value
+    types, is inferred as JSON: `materialize()` casts the three `claude_*` token columns back to BIGINT,
+    and `_child_projection` the BIGINT / BOOLEAN fields of `tool_calls` and `timing_events`.
   - **Fetch marshalling differs**: native returns `TIMESTAMP` cells as Python `datetime`,
     duckdb-wasm returns them as **strings**. Never fetch a raw `TIMESTAMP` and do datetime math —
     select `CAST(epoch_us(ts) AS BIGINT)` (an int round-trips identically) and rebuild the datetime

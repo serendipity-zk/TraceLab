@@ -93,13 +93,20 @@ _TIMING_FIELDS = (
     ("result_chars", "BIGINT", "te.result_chars"),
     ("content_chars", "BIGINT", "te.content_chars"),
 )
+# Claude's token split is null on every Codex round, so a Codex-only trace infers these as JSON.
+_CLAUDE_ROUND_COUNTS = (
+    "claude_uncached_input_tokens",
+    "claude_cache_creation_input_tokens",
+    "claude_cache_read_input_tokens",
+)
 
 
-def _list_elem_fields(col_type: str) -> list[str] | None:
-    """Field names of a list column's STRUCT element type, in declared order. Returns ``None`` when the
-    column isn't a list of structs (e.g. ``JSON[]`` from non-unifiable dicts) — callers then keep
+def _list_elem_types(col_type: str) -> dict[str, str] | None:
+    """Field name → type of a list column's STRUCT element type, in declared order. Returns ``None`` when
+    the column isn't a list of structs (e.g. ``JSON[]`` from non-unifiable dicts) — callers then keep
     DuckDB's permissive JSON access instead of null-filling. Field NAMES are identical across the
-    native + wasm engines (they come from the data's keys), so this stays engine-independent."""
+    native + wasm engines (they come from the data's keys), so this stays engine-independent; the types
+    are only used to spot a key that ``read_json`` inferred as JSON."""
     s = col_type.strip()
     if not s.endswith("[]"):
         return None
@@ -124,23 +131,28 @@ def _list_elem_fields(col_type: str) -> list[str] | None:
             tok += ch
     if tok.strip():
         parts.append(tok)
-    names: list[str] = []
+    types: dict[str, str] = {}
     for part in parts:
         p = part.strip()
         if not p:
             continue
         if p.startswith('"'):
-            names.append(p[1 : p.index('"', 1)])  # quoted field name (e.g. "timestamp", "source")
+            end = p.index('"', 1)
+            types[p[1:end]] = p[end + 1 :].strip()  # quoted field name (e.g. "timestamp", "source")
         else:
-            names.append(p.split()[0])
-    return names
+            name, _, typ = p.partition(" ")
+            types[name] = typ.strip()
+    return types
 
 
-def _child_projection(alias: str, present: list[str] | None, specs) -> list[str]:
+def _child_projection(alias: str, present: dict[str, str] | None, specs) -> list[str]:
     """Per-field SELECT exprs producing the documented scalar TYPES regardless of how the trace's list
     element was inferred:
 
     * struct element, key present  → native struct access (``te.field``) — byte-identical to history;
+      except a number / flag key that ``read_json`` inferred as JSON (null in every row, or mixed value
+      types): it is TRY_CAST to the documented type (a JSON column breaks comparisons such as
+      ``lat <= 0``);
     * struct element, key absent   → ``CAST(NULL AS <type>)`` so the column still exists, typed;
     * non-struct element (``JSON[]`` from non-unifiable dicts) → JSON-extract the key as text and CAST
       to the documented type. Struct access on a JSON element would otherwise yield JSON-typed columns
@@ -151,7 +163,8 @@ def _child_projection(alias: str, present: list[str] | None, specs) -> list[str]
             ref = f"{alias}->>'{name}'"  # JSON value-by-key → VARCHAR (NULL when the key is absent)
             expr = _ts(ref) if null_type == "TIMESTAMP" else f"CAST({ref} AS {null_type})"
         elif name in present:
-            expr = native_expr
+            inferred_json = present[name] == "JSON" and null_type in ("BIGINT", "BOOLEAN")
+            expr = f"TRY_CAST({native_expr} AS {null_type})" if inferred_json else native_expr
         else:
             expr = f"CAST(NULL AS {null_type})"
         out.append(f"{expr} AS {name}")
@@ -222,12 +235,20 @@ def materialize(trace_path, db_path) -> Path:
             f"{user_select} "
             "FROM _raw"
         )
+        # A count column inferred as JSON (null in every row) is cast back to BIGINT, so SQL
+        # arithmetic on it works; a trace that has values keeps the native column.
+        for col in _CLAUDE_ROUND_COUNTS:
+            if raw_types.get(col) == "JSON":
+                con.execute(
+                    f"ALTER TABLE rounds ALTER COLUMN {col} TYPE BIGINT "
+                    f"USING TRY_CAST({col} AS BIGINT)"
+                )
         # tool_calls: one row per tool call. Drop the raw `input` dict (schema-drift trap); keep only
         # the typed scalars experiments use. Null-fill any keys this trace's tool struct lacks (see
         # _TOOL_FIELDS); fall back to an empty, full-schema table when there's no tool list at all.
         tools_type = raw_types.get("tools", "")
         if "tools" in raw_cols and tools_type.strip().endswith("[]"):
-            tc_cols = ["round_pk"] + _child_projection("tc", _list_elem_fields(tools_type), _TOOL_FIELDS)
+            tc_cols = ["round_pk"] + _child_projection("tc", _list_elem_types(tools_type), _TOOL_FIELDS)
             con.execute(
                 "CREATE TABLE tool_calls AS SELECT "
                 + ", ".join(tc_cols)
@@ -239,7 +260,7 @@ def materialize(trace_path, db_path) -> Path:
         # UNNESTs zip in lockstep, so event_index is the 1-based position in the round's list.
         te_type = raw_types.get("timing_events", "")
         if "timing_events" in raw_cols and te_type.strip().endswith("[]"):
-            te_cols = ["round_pk", "event_index"] + _child_projection("te", _list_elem_fields(te_type), _TIMING_FIELDS)
+            te_cols = ["round_pk", "event_index"] + _child_projection("te", _list_elem_types(te_type), _TIMING_FIELDS)
             con.execute(
                 "CREATE TABLE timing_events AS SELECT "
                 + ", ".join(te_cols)
