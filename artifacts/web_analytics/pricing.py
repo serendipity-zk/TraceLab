@@ -7,7 +7,8 @@ so prices are edited in exactly one place. This module mirrors that file's resol
 (Pyodide) cost numbers reconcile with the mock.
 
 USD per 1,000,000 tokens. ``cachedInputPerM`` is the cache-READ rate;
-``cacheWrite5mInputPerM`` is the Anthropic 5-minute cache-WRITE rate when present.
+``cacheWrite5mInputPerM`` / ``cacheWrite1hInputPerM`` are the Anthropic 5-minute / 1-hour
+cache-WRITE rates when present.
 """
 
 from __future__ import annotations
@@ -26,8 +27,12 @@ _PER_M = 1_000_000
 class ModelPrice(TypedDict):
     inputPerM: float
     cacheWrite5mInputPerM: NotRequired[float]
+    cacheWrite1hInputPerM: NotRequired[float]
     cachedInputPerM: float
     outputPerM: float
+
+
+_OPTIONAL_RATES = ("cacheWrite5mInputPerM", "cacheWrite1hInputPerM")
 
 
 def _load_table() -> dict:
@@ -54,8 +59,9 @@ def price_for(provider: str, model: Optional[str]) -> Optional[ModelPrice]:
             "cachedInputPerM": exact["cachedInputPerM"],
             "outputPerM": exact["outputPerM"],
         }
-        if "cacheWrite5mInputPerM" in exact:
-            price["cacheWrite5mInputPerM"] = exact["cacheWrite5mInputPerM"]
+        for rate in _OPTIONAL_RATES:
+            if rate in exact:
+                price[rate] = exact[rate]
         return price
     lowered = model.lower()
     for fam in _FAMILY:
@@ -65,8 +71,9 @@ def price_for(provider: str, model: Optional[str]) -> Optional[ModelPrice]:
                 "cachedInputPerM": fam["cachedInputPerM"],
                 "outputPerM": fam["outputPerM"],
             }
-            if "cacheWrite5mInputPerM" in fam:
-                price["cacheWrite5mInputPerM"] = fam["cacheWrite5mInputPerM"]
+            for rate in _OPTIONAL_RATES:
+                if rate in fam:
+                    price[rate] = fam[rate]
             return price
     return None
 
@@ -91,16 +98,21 @@ def round_cost(
     output_tokens: float,
     reasoning_tokens: float = 0,
     cache_write_tokens: float = 0,
+    cache_write_1h_tokens: float = 0,
 ) -> RoundCost:
     """Cost of one round (or a summed bucket) given its token split. Mirrors ``roundCost`` in
     cost.ts: append billed at fresh-input/cache-write rates, prefix at cache-read rate, output at
     output rate; ``reasoningCost`` is the reasoning slice of output (already included in ``total``
-    via output)."""
+    via output). ``cache_write_1h_tokens`` is the 1-hour-TTL part of ``cache_write_tokens``; the
+    rest is billed as 5-minute writes."""
     write_tokens = max(0.0, min(float(cache_write_tokens or 0), float(append_tokens or 0)))
+    write_1h_tokens = max(0.0, min(float(cache_write_1h_tokens or 0), write_tokens))
     base_append_tokens = float(append_tokens or 0) - write_tokens
     write_rate = price.get("cacheWrite5mInputPerM", price["inputPerM"])
+    write_1h_rate = price.get("cacheWrite1hInputPerM", write_rate)
     input_cost = base_append_tokens * _per_token(price["inputPerM"])
-    cache_write_cost = write_tokens * _per_token(write_rate)
+    cache_write_cost = (write_tokens - write_1h_tokens) * _per_token(write_rate)
+    cache_write_cost += write_1h_tokens * _per_token(write_1h_rate)
     cached_cost = prefix_tokens * _per_token(price["cachedInputPerM"])
     output_cost = output_tokens * _per_token(price["outputPerM"])
     reasoning_cost = (reasoning_tokens or 0) * _per_token(price["outputPerM"])

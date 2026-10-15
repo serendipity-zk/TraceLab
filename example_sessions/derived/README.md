@@ -25,10 +25,13 @@ For Codex, `prefix_tokens` comes from `cached_input_tokens`.
 Claude rows also expose the provider usage split:
 
 ```text
-claude_uncached_input_tokens       = usage.input_tokens
-claude_cache_creation_input_tokens = usage.cache_creation_input_tokens
-claude_cache_read_input_tokens     = usage.cache_read_input_tokens
+claude_uncached_input_tokens          = usage.input_tokens
+claude_cache_creation_input_tokens    = usage.cache_creation_input_tokens
+claude_cache_read_input_tokens        = usage.cache_read_input_tokens
+claude_cache_creation_1h_input_tokens = usage.cache_creation.ephemeral_1h_input_tokens (null if absent)
 ```
+
+The example files in this folder predate `claude_cache_creation_1h_input_tokens` and do not carry it.
 
 Rows include current-input summaries derived from their input-side timing events:
 

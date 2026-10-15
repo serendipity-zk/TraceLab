@@ -45,6 +45,7 @@ def build_per_day(rows: list[RoundRow], tz_offset_min: int) -> list[dict[str, An
                 r["output"],
                 r["reasoning"],
                 cache_write_tokens=r["cache_write"],
+                cache_write_1h_tokens=r["cache_write_1h"],
             )["total"]
     return [days[k] for k in sorted(days)]
 

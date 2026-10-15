@@ -133,6 +133,9 @@ Prices are USD per 1,000,000 tokens. Resolve prices by exact key `provider:model
 lowercase substring match against `family[].match`; if neither matches, mark the rows unpriced
 rather than guessing. `cachedInputPerM` is the cache-read rate. `cacheWrite5mInputPerM`, when
 present, is the 5-minute cache-write rate; otherwise cache-write tokens use `inputPerM`.
+`cacheWrite1hInputPerM`, when present, is the 1-hour cache-write rate, applied to
+`claude_cache_creation_1h_input_tokens` (the 1-hour part of the cache write; null means no TTL
+split was recorded, so the whole write is billed at the 5-minute rate).
 
 Every cost answer must report how many rounds were priced and how many were unpriced. Exclude
 unpriced rounds from dollar totals, and explicitly tell the user that those unpriced rounds were
@@ -142,9 +145,13 @@ Cost formula for one row or aggregate bucket:
 
 ```python
 cache_write_tokens = coalesce(claude_cache_creation_input_tokens, 0)
+# claude_cache_creation_1h_input_tokens: use 0 if the column does not exist (traces older than the field)
+cache_write_1h_tokens = least(coalesce(claude_cache_creation_1h_input_tokens, 0), cache_write_tokens)
 base_input_tokens = max(newly_append_tokens - cache_write_tokens, 0)
 input_cost = base_input_tokens * inputPerM / 1_000_000
-cache_write_cost = cache_write_tokens * coalesce(cacheWrite5mInputPerM, inputPerM) / 1_000_000
+write_5m_rate = coalesce(cacheWrite5mInputPerM, inputPerM)
+cache_write_cost = ((cache_write_tokens - cache_write_1h_tokens) * write_5m_rate
+                    + cache_write_1h_tokens * coalesce(cacheWrite1hInputPerM, write_5m_rate)) / 1_000_000
 cached_cost = prefix_tokens * cachedInputPerM / 1_000_000
 output_cost = output_tokens * outputPerM / 1_000_000
 total_cost = input_cost + cache_write_cost + cached_cost + output_cost

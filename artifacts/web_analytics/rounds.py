@@ -26,6 +26,8 @@ class RoundRow(TypedDict):
     prefix: int
     append: int
     cache_write: int
+    # 1-hour-TTL part of cache_write (0 when the trace has no TTL split: billed as 5-minute writes).
+    cache_write_1h: int
     output: int
     reasoning: int
     first_ts_us: Optional[int]
@@ -49,7 +51,7 @@ tool_n AS (
     GROUP BY round_pk
 )
 SELECT r.round_pk, r.provider, r.model, r.session_id, r."user", r.round_index,
-       r.prefix_tokens, r.newly_append_tokens, {cache_write_expr},
+       r.prefix_tokens, r.newly_append_tokens, {cache_write_expr}, {cache_write_1h_expr},
        r.output_tokens, r.reasoning_output_tokens,
        r.first_input_event_type, f.ts_us, COALESCE(t.n, 0) AS tool_calls
 FROM rounds r
@@ -83,7 +85,12 @@ def load_rounds(con) -> list[RoundRow]:
         if _has_round_column(con, "claude_cache_creation_input_tokens")
         else "CAST(NULL AS BIGINT) AS claude_cache_creation_input_tokens"
     )
-    sql = _SQL_TEMPLATE.format(cache_write_expr=cache_write_expr)
+    cache_write_1h_expr = (
+        "CAST(r.claude_cache_creation_1h_input_tokens AS BIGINT)"
+        if _has_round_column(con, "claude_cache_creation_1h_input_tokens")
+        else "CAST(NULL AS BIGINT)"
+    )
+    sql = _SQL_TEMPLATE.format(cache_write_expr=cache_write_expr, cache_write_1h_expr=cache_write_1h_expr)
     for (
         round_pk,
         provider,
@@ -94,6 +101,7 @@ def load_rounds(con) -> list[RoundRow]:
         prefix,
         append,
         cache_write,
+        cache_write_1h,
         output,
         reasoning,
         first_input_event_type,
@@ -111,6 +119,7 @@ def load_rounds(con) -> list[RoundRow]:
                 "prefix": _i(prefix),
                 "append": _i(append),
                 "cache_write": _i(cache_write),
+                "cache_write_1h": _i(cache_write_1h),
                 "output": _i(output),
                 "reasoning": _i(reasoning),
                 "first_ts_us": int(ts_us) if ts_us is not None else None,

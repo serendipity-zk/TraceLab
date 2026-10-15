@@ -124,7 +124,13 @@ function renderKpis(): void {
   set('output', compact(a.kpis.outputTokens));
   foot('span', template(t.activeSpan, { active: a.kpis.activeDays, days }));
   foot('users', template(t.users, { count: a.kpis.users }));
-  foot('costperday', a.kpis.activeDays ? template(t.costPerActiveDay, { cost: fmtUsd(a.kpis.totalCostUsd / a.kpis.activeDays) }) : '—');
+  // Unpriced models add $0 to the total; say so where the total is shown, not only in the model panel.
+  const unpriced = a.cost.unpricedRounds;
+  const costFoot = [
+    a.kpis.activeDays ? template(t.costPerActiveDay, { cost: fmtUsd(a.kpis.totalCostUsd / a.kpis.activeDays) }) : '',
+    unpriced === 1 ? t.unpricedExcludedOne : unpriced ? template(t.unpricedExcluded, { steps: intComma(unpriced) }) : '',
+  ].filter(Boolean);
+  foot('costperday', costFoot.length ? costFoot.join(' · ') : '—');
   const cachedPct = a.kpis.inputTokens ? Math.round((a.kpis.cachedInputTokens / a.kpis.inputTokens) * 100) : 0;
   foot('cachedpct', template(t.servedFromCache, { pct: cachedPct }));
   foot('outputperstep', a.kpis.rounds ? template(t.avgPerStep, { value: compact(Math.round(a.kpis.outputTokens / a.kpis.rounds)) }) : '—');

@@ -14,7 +14,8 @@ the step's net context growth:
 All other steps keep their observed ``prefix_tokens`` / ``newly_append_tokens`` split. The total
 input length of each step is unchanged, so any append-token reduction is moved into prefix tokens
 and billed at the cache-read price. Remaining Claude cache-creation tokens are billed at the
-5-minute cache-write rate. Output tokens are unchanged. This is an upper-bound estimate because it
+5-minute / 1-hour cache-write rates, keeping the step's observed mix of the two. Output tokens are
+unchanged. This is an upper-bound estimate because it
 assumes all shifted tokens can be served from cache at the cache-read rate.
 """
 
@@ -270,6 +271,11 @@ def collect(con) -> dict[str, ScopeAccum]:
         if _has_round_column(con, "claude_cache_creation_input_tokens")
         else "CAST(NULL AS BIGINT) AS claude_cache_creation_input_tokens"
     )
+    cache_write_1h_expr = (
+        "CAST(r.claude_cache_creation_1h_input_tokens AS BIGINT)"
+        if _has_round_column(con, "claude_cache_creation_1h_input_tokens")
+        else "CAST(NULL AS BIGINT)"
+    )
     rows = con.execute(
         """
         WITH first_ev AS (
@@ -306,6 +312,7 @@ def collect(con) -> dict[str, ScopeAccum]:
                r.prefix_tokens,
                r.newly_append_tokens,
                {cache_write_expr},
+               {cache_write_1h_expr},
                r.output_tokens,
                f.event_type,
                f.first_event_us,
@@ -314,7 +321,7 @@ def collect(con) -> dict[str, ScopeAccum]:
         FROM rounds r LEFT JOIN first_ev f USING (round_pk)
                       LEFT JOIN activity_bounds b USING (round_pk)
         ORDER BY r.round_pk
-        """.format(cache_write_expr=cache_write_expr)
+        """.format(cache_write_expr=cache_write_expr, cache_write_1h_expr=cache_write_1h_expr)
     ).fetchall()
 
     accums: dict[str, ScopeAccum] = defaultdict(ScopeAccum)
@@ -327,6 +334,7 @@ def collect(con) -> dict[str, ScopeAccum]:
         prefix_tokens,
         append_tokens,
         cache_write_tokens,
+        cache_write_1h_tokens,
         output_tokens,
         event_type,
         first_event_us,
@@ -358,16 +366,20 @@ def collect(con) -> dict[str, ScopeAccum]:
         shifted_from_append = max(0, app - cf_app)
         cf_cache_write = max(0, cache_write - shifted_from_append)
         cf_cache_write = min(cf_cache_write, cf_app)
+        # The trace does not say which TTL the shifted tokens were written with: keep the round's mix.
+        cache_write_1h = min(_int_or_zero(cache_write_1h_tokens), cache_write)
+        cf_cache_write_1h = cache_write_1h * cf_cache_write / cache_write if cache_write else 0
 
         price = pricing.price_for(provider, model)
         observed_cost = counterfactual_cost = None
         cost_reduction_sample = None
         if price is not None:
             observed_cost = pricing.round_cost(
-                price, pre, app, out, cache_write_tokens=cache_write
+                price, pre, app, out, cache_write_tokens=cache_write, cache_write_1h_tokens=cache_write_1h
             )
             counterfactual_cost = pricing.round_cost(
-                price, cf_pre, cf_app, out, cache_write_tokens=cf_cache_write
+                price, cf_pre, cf_app, out, cache_write_tokens=cf_cache_write,
+                cache_write_1h_tokens=cf_cache_write_1h,
             )
             cost_reduction_sample = observed_cost["total"] - counterfactual_cost["total"]
 
@@ -523,7 +535,16 @@ def render_md(accums: dict[str, ScopeAccum]) -> str:
     return md_table.gfm_table(headers, _table_rows(accums), ["l", "r", "r", "r"])
 
 
-def write_latex_table(path: Path, accums: dict[str, ScopeAccum]) -> None:
+def has_1h_split(con) -> bool:
+    """Whether any round records the 1-hour part of its cache write (v0.0.2 does not)."""
+    if not _has_round_column(con, "claude_cache_creation_1h_input_tokens"):
+        return False
+    return con.execute(
+        "SELECT count(*) FROM rounds WHERE claude_cache_creation_1h_input_tokens IS NOT NULL"
+    ).fetchone()[0] > 0
+
+
+def write_latex_table(path: Path, accums: dict[str, ScopeAccum], has_1h: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     rows = _table_rows(accums, tex=True)
     lines = [
@@ -534,8 +555,14 @@ def write_latex_table(path: Path, accums: dict[str, ScopeAccum]) -> None:
         "\\caption{Upper-bound append-token and cost savings from eliminating user-thinking-induced",
         "prefix-cache misses. Append after retained cache is capped at context growth for",
         "user-initiated steps; shifted tokens are billed at the cache-read",
-        "rate, and remaining Claude cache-created append tokens use the 5-minute",
-        "cache-write rate from the provider list prices.}",
+        # Name the 1-hour rate only when the trace records the split; without it every write is 5-minute.
+        *(
+            ["rate, and remaining Claude cache-created append tokens use the 5-minute /",
+             "1-hour cache-write rates (the step's observed mix) from the provider list prices.}"]
+            if has_1h
+            else ["rate, and remaining Claude cache-created append tokens use the 5-minute",
+                  "cache-write rate from the provider list prices.}"]
+        ),
         "\\label{tab:human_idle_cache_counterfactual}",
         "\\small",
         "\\setlength{\\tabcolsep}{6pt}",
@@ -613,6 +640,7 @@ def main() -> int:
     con = trace_db.open_from_args(args)
     try:
         accums = collect(con)
+        has_1h = has_1h_split(con)
     finally:
         con.close()
 
@@ -623,7 +651,7 @@ def main() -> int:
 
     write_summary_csv(summary_csv, accums)
     md_path.write_text(render_md(accums), encoding="utf-8")
-    write_latex_table(tex_path, accums)
+    write_latex_table(tex_path, accums, has_1h)
     headline_path.write_text(json.dumps(render_headline(accums), indent=2) + "\n", encoding="utf-8")
 
     print(render_stdout(accums))

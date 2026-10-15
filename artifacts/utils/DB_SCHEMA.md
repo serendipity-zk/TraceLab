@@ -51,6 +51,7 @@ never on `round_id`/`trace_key`. To order rounds within a session use
 | `claude_uncached_input_tokens` | BIGINT | Claude-only accounting (may be 0/null for Codex) |
 | `claude_cache_creation_input_tokens` | BIGINT | |
 | `claude_cache_read_input_tokens` | BIGINT | |
+| `claude_cache_creation_1h_input_tokens` | BIGINT | 1-hour-TTL part of `claude_cache_creation_input_tokens` (billed at the 1-hour write rate); null = no TTL split recorded (Codex, older Claude Code): priced as 5-minute writes; pinned to BIGINT |
 | `output_tokens` | BIGINT | |
 | `reasoning_output_tokens` | BIGINT | int\|null; **pinned to BIGINT** (all-null traces otherwise infer JSON) |
 | `current_input_event_count` | BIGINT | |

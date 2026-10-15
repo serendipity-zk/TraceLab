@@ -85,6 +85,13 @@ def apply_usage(round_obj: dict[str, Any], msg: dict[str, Any]) -> None:
     round_obj["claude_uncached_input_tokens"] = uncached
     round_obj["claude_cache_creation_input_tokens"] = cache_write
     round_obj["claude_cache_read_input_tokens"] = cache_read
+    # 1-hour cache writes are billed higher than 5-minute ones. Newer records split the write by TTL
+    # in usage.cache_creation; the 5-minute part is the remainder. None when the record has no split.
+    split = usage.get("cache_creation")
+    write_1h = split.get("ephemeral_1h_input_tokens") if isinstance(split, dict) else None
+    round_obj["claude_cache_creation_1h_input_tokens"] = (
+        min(max(write_1h, 0), cache_write) if isinstance(write_1h, int) and not isinstance(write_1h, bool) else None
+    )
     round_obj["output_tokens"] = output_tokens
     round_obj["_usage_score"] = usage_score
 
@@ -248,6 +255,7 @@ def make_round(
         "claude_uncached_input_tokens": 0,
         "claude_cache_creation_input_tokens": 0,
         "claude_cache_read_input_tokens": 0,
+        "claude_cache_creation_1h_input_tokens": None,
         "output_tokens": 0,
         "reasoning_output_tokens": None,
         "timing_events": list(timing_events),

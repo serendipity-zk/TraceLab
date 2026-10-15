@@ -441,6 +441,8 @@ export const uiCopy = {
           costPerActiveDay: '{cost} / active day',
           servedFromCache: '{pct}% served from cache',
           avgPerStep: '{value} avg / step',
+          unpricedExcludedOne: '1 unpriced step not included',
+          unpricedExcluded: '{steps} unpriced steps not included',
         },
         providers: {
           stepTitle: '{provider}: {pct}% of steps',
@@ -1352,6 +1354,8 @@ export const uiCopy = {
           costPerActiveDay: '{cost} / 活跃日',
           servedFromCache: '{pct}% 来自缓存',
           avgPerStep: '平均每步 {value}',
+          unpricedExcludedOne: '未计入 1 个未定价步骤',
+          unpricedExcluded: '未计入 {steps} 个未定价步骤',
         },
         providers: {
           stepTitle: '{provider}: {pct}% 的步骤',

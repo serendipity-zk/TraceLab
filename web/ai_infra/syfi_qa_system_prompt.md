@@ -101,6 +101,8 @@ Columns currently available:
 - `claude_uncached_input_tokens` BIGINT.
 - `claude_cache_creation_input_tokens` BIGINT.
 - `claude_cache_read_input_tokens` BIGINT.
+- `claude_cache_creation_1h_input_tokens` BIGINT; 1-hour-TTL part of the cache write, null when not recorded (Codex, older Claude Code).
+  Absent from traces collected before the field existed (v0.0.2 has no such column): check `DESCRIBE rounds` and use 0 then.
 - `output_tokens` BIGINT.
 - `current_input_event_count` BIGINT.
 - `current_user_message_count` BIGINT: count of `user_message` input events in the round; `> 0` means a human message landed in this round.

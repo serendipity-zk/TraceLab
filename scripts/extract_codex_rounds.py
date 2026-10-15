@@ -734,6 +734,7 @@ def extract_codex_session(
                     "claude_uncached_input_tokens": None,
                     "claude_cache_creation_input_tokens": None,
                     "claude_cache_read_input_tokens": None,
+                    "claude_cache_creation_1h_input_tokens": None,
                     "output_tokens": usage_int(last_usage, "output_tokens"),
                     "reasoning_output_tokens": usage_int(last_usage, "reasoning_output_tokens"),
                     "timing_events": timing_events,
