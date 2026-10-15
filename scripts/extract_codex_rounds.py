@@ -400,18 +400,40 @@ def extract_codex_session(
                 current_turn_id = payload.get("turn_id") or current_turn_id
                 continue
 
-            if top_type == "event_msg" and payload_type == "user_message":
+            # The user's prompt: `event_msg/user_message`, or `event_msg/item_completed` with a
+            # `UserMessage` item, which is how the main thread of Codex CLI >= 0.147 writes it.
+            user_item = (
+                payload.get("item")
+                if top_type == "event_msg"
+                and payload_type == "item_completed"
+                and isinstance(payload.get("item"), dict)
+                and payload["item"].get("type") == "UserMessage"
+                else None
+            )
+            if (
+                top_type == "event_msg" and payload_type == "user_message"
+            ) or user_item is not None:
+                # The item carries text parts; join them so content_chars counts text, as for
+                # user_message (a malformed item still counts as the prompt, with the text it has).
+                parts = user_item.get("content") if user_item is not None else None
+                message = (
+                    payload.get("message")
+                    if user_item is None
+                    else "".join(
+                        part["text"]
+                        for part in (parts if isinstance(parts, list) else [])
+                        if isinstance(part, dict) and isinstance(part.get("text"), str)
+                    )
+                )
                 append_timing_event(
                     pending_input_events,
                     "user_message",
                     timestamp,
-                    "event_msg.user_message",
-                    content_chars=content_chars(payload.get("message")),
+                    "event_msg.user_message" if user_item is None else "event_msg.item_completed",
+                    content_chars=content_chars(message),
                 )
                 if raw_sink is not None:
-                    raw_pending_in.append(
-                        {"kind": "user", "text": _raw_text(payload.get("message"))}
-                    )
+                    raw_pending_in.append({"kind": "user", "text": _raw_text(message)})
                 continue
 
             if top_type == "response_item" and payload_type == "reasoning":

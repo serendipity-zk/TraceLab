@@ -51,6 +51,7 @@ Codex CLI raw records commonly include:
 When interpreting Codex:
 
 - Expect duplicate-looking layers. A user-visible message can appear as both `response_item` and `event_msg.user_message`; an assistant reply can appear as both `response_item` and `event_msg.agent_message`.
+- From Codex CLI 0.147 on, the main thread writes the prompt as `event_msg.item_completed` with an item of type `UserMessage` instead of `event_msg.user_message`; automatic-review rollouts wrote `event_msg.user_message` up to CLI 0.156, and from 0.158 mostly carry the request only as a `role = user` `response_item`, which the extractor does not read (injected context has the same shape). In the rollouts we checked, no rollout writes both prompt records.
 - Pair tool calls by `response_item.payload.type == "function_call"` and later `function_call_output` records with the same call id.
 - Treat `event_msg.token_count` as accounting for the preceding model round. `last_token_usage.input_tokens` already includes cached tokens.
 - Treat `cached_input_tokens` as prompt-cache hit prefix tokens and `input_tokens - cached_input_tokens` as uncached prompt-side work.

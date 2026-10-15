@@ -106,7 +106,7 @@ UNNEST of each round's `timing_events` list (union of 5 key variants → nulls w
 | `round_pk` | BIGINT | → `rounds.round_pk` |
 | `event_index` | BIGINT | 1-based position in the round's `timing_events` list (recover the first/ordered event) |
 | `event_type` | VARCHAR | |
-| `source` | VARCHAR | |
+| `source` | VARCHAR | raw record the event was read from, e.g. `response_item.function_call_output`, `assistant.content.tool_use`; a Codex `user_message` has `event_msg.user_message`, or `event_msg.item_completed` on the main thread of Codex CLI ≥ 0.147; automatic-review rounds of CLI ≥ 0.158 mostly have no prompt event |
 | `timestamp` | TIMESTAMP | normalized to naive UTC microseconds; fetch via `epoch_us` (see gotchas) |
 | `tool_call_id` | VARCHAR | nullable |
 | `tool_index` | BIGINT | nullable |
