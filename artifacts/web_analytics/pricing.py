@@ -49,10 +49,15 @@ _FAMILY: list = _TABLE.get("family", [])
 
 def price_for(provider: str, model: Optional[str]) -> Optional[ModelPrice]:
     """Resolve a price for (provider, model). Returns ``None`` when truly unknown (caller marks
-    the rounds *unpriced* rather than guessing). Matches ``priceFor`` in lib/analytics/cost.ts."""
+    the rounds *unpriced* rather than guessing). An exact entry set to null is a model with no
+    public API price: unpriced, and no family default applies. Matches ``priceFor`` in
+    lib/analytics/cost.ts."""
     if not model:
         return None
-    exact = _EXACT.get(f"{provider}:{model}")
+    key = f"{provider}:{model}"
+    if key in _EXACT and _EXACT[key] is None:
+        return None
+    exact = _EXACT.get(key)
     if exact:
         price: ModelPrice = {
             "inputPerM": exact["inputPerM"],

@@ -136,7 +136,8 @@ def test_a_price_without_a_1h_rate_bills_1h_writes_at_the_5m_rate() -> None:
 
 def test_price_table_write_rates_follow_the_input_rate() -> None:
     table = json.loads((REPO_ROOT / "artifacts/utils/pricing.json").read_text(encoding="utf-8"))
-    entries = list(table["exact"].values()) + table["family"]
+    # a null exact entry means "no API price" (unpriced); it has no rates to check
+    entries = [e for e in table["exact"].values() if e is not None] + table["family"]
     for e in entries:
         if "cacheWrite5mInputPerM" in e:
             assert e["cacheWrite5mInputPerM"] == pytest.approx(1.25 * e["inputPerM"])
@@ -195,6 +196,64 @@ def test_old_databases_expose_the_new_column_as_a_typed_null(tmp_path: Path) -> 
     assert types.get(FIELD) == "BIGINT"
     assert con.execute(f"SELECT count(*) FROM rounds WHERE {FIELD} IS NOT NULL").fetchone()[0] == 0
     assert load_rounds(con)[0]["cache_write_1h"] == 0
+
+
+# Anthropic prompt-caching price table (docs, as of 2026-09): input / 5m write / 1h write / cache read / output.
+# These models differ from their family default (Fable 5.1 and Opus 5.5 also read cache below 0.1x input), so
+# each must resolve through an exact entry rather than the family fallback.
+@pytest.mark.parametrize(
+    ("model", "rates"),
+    [
+        ("claude-fable-5-1", (10, 12.5, 20, 0.25, 50)),
+        ("claude-opus-5-5", (4, 5, 8, 0.2, 20)),
+        ("claude-opus-5", (5, 6.25, 10, 0.5, 25)),
+        ("claude-sonnet-5", (2, 2.5, 4, 0.2, 10)),
+        ("claude-opus-4-1-20250805", (15, 18.75, 30, 1.5, 75)),  # the "opus" family default is 5 / 25
+    ],
+)
+def test_newer_claude_models_have_exact_official_prices(model: str, rates: tuple) -> None:
+    assert f"claude:{model}" in pricing._EXACT
+    p = pricing.price_for("claude", model)
+    assert (p["inputPerM"], p["cacheWrite5mInputPerM"], p["cacheWrite1hInputPerM"], p["cachedInputPerM"],
+            p["outputPerM"]) == rates
+
+
+# OpenAI API pricing page (as of 2026-09), standard tier, short context: input / cached input / output.
+@pytest.mark.parametrize(
+    ("model", "rates"),
+    [
+        ("gpt-6-astra", (10, 1, 50)),
+        ("gpt-6-sol", (2, 0.2, 10)),
+        ("gpt-6-luna", (0.1, 0.01, 0.5)),
+        ("gpt-5.6-cyber", (12.5, 1.25, 75)),
+        ("gpt-5.6-sol", (4, 0.4, 20)),
+        ("gpt-5.6-terra", (2, 0.2, 12)),
+        ("gpt-5.6-luna", (0.2, 0.02, 1.2)),
+        ("gpt-5.5", (5, 0.5, 30)),
+        ("gpt-5.4", (2.5, 0.25, 15)),
+        ("gpt-5.4-mini", (0.75, 0.075, 4.5)),
+        ("gpt-5.3-codex", (1.75, 0.175, 14)),
+        ("gpt-5.2-codex", (1.75, 0.175, 14)),
+        ("gpt-5.2", (1.75, 0.175, 14)),
+        ("gpt-5.1-codex-max", (1.25, 0.125, 10)),
+        ("gpt-5.1-codex-mini", (0.25, 0.025, 2)),
+        ("gpt-5.1-codex", (1.25, 0.125, 10)),
+        ("gpt-5.1", (1.25, 0.125, 10)),
+        ("gpt-5-codex", (1.25, 0.125, 10)),
+        ("gpt-5", (1.25, 0.125, 10)),
+    ],
+)
+def test_codex_models_have_exact_official_prices(model: str, rates: tuple) -> None:
+    assert f"codex:{model}" in pricing._EXACT
+    p = pricing.price_for("codex", model)
+    assert (p["inputPerM"], p["cachedInputPerM"], p["outputPerM"]) == rates
+
+
+def test_a_null_exact_entry_is_unpriced_not_family_priced() -> None:
+    # gpt-5.3-codex-spark has no public API price; the "gpt-5" family default must not price it.
+    assert pricing._EXACT["codex:gpt-5.3-codex-spark"] is None
+    assert pricing.price_for("codex", "gpt-5.3-codex-spark") is None
+    assert pricing.price_for("codex", "gpt-5.9-unknown") is not None  # other gpt-5.x still use the family
 
 
 # --------------------------------------------------------------------------- every cost consumer passes the 1h part
