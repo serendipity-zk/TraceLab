@@ -67,7 +67,9 @@ const dur = (sec: number) =>
   : sec < 3600 ? `${Math.round(sec / 60)} min`
   : `${(sec / 3600).toFixed(1)} h`;
 const fmtDur = (s: number) => (s >= 3600 ? `${(s / 3600).toFixed(1)}h` : `${Math.round(s / 60)}m`);
-const esc = (s: string) => s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
+// Also escapes quotes: values land in quoted attributes (such as title) as well as in text.
+const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESC[c]);
 const rt = () => browserCopy().dashboardRuntime;
 const L = (label: string): string => {
   const labels = rt().labels;
@@ -490,7 +492,7 @@ function sessionCard(s: SessionRow): HTMLButtonElement {
   if (s.sessionId === selectedId) row.classList.add('active');
   row.innerHTML =
     `<div class="sr-id"><span class="sr-name" title="${esc(s.title ?? s.sessionId)}">${esc(s.title ?? s.sessionId)}</span>` +
-    `<span class="pill ${s.provider === 'codex' ? 'codex' : ''}">${s.provider}</span></div>` +
+    `<span class="pill ${s.provider === 'codex' ? 'codex' : ''}">${esc(s.provider)}</span></div>` +
     `<div class="sr-meta">${esc(template(rt().sessions.meta, { steps: intComma(s.rounds), duration: localDur(s.durationS), cost: fmtUsd(s.costUsd) }))}</div>`;
   row.addEventListener('click', () => selectSession(s.sessionId, { scroll: true }));
   return row;
