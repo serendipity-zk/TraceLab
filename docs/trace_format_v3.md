@@ -1,7 +1,8 @@
 # Normalized trace format v3: agent structure
 
-Status: **proposal** (2026-10-16). Builds on PR #30 (subagent hierarchy) and PR #37 (session
-relationships). Field names are new: #30's `thread_kind` / `guardian` / `agent_role` become `session_type` / `auto_review` / `agent_type`.
+Status: **proposal** (2026-10-16). Draws on PR #30 (subagent hierarchy) and PR #37 (session
+relationships); field names are new (#30's `thread_kind` / `guardian` / `agent_role` are
+`session_type` / `auto_review` / `agent_type` here).
 
 v3 keeps the v2 shape, one JSONL row per LLM round, and adds fields. Nothing in v2 changes meaning
 except one correction: `user_message` events now come only from text a person wrote (see
@@ -139,13 +140,59 @@ did, so for them nothing changes.
 
 ## Sanitization
 
-Extends #30's rules:
+Links survive sanitization when every reference to an id is replaced exactly like the id itself:
 
-- `session_id`, `parent_session_id`, `root_session_id` share one map, so links survive.
-- `parent_tool_call_id` shares the `tool_call_id` map, so it still joins to the parent's tool call.
-- `workflow_id` → opaque `wf_N`; `agent_type` → built-in or `custom_agent_type_N`.
+- `session_id`, `parent_session_id`, `root_session_id` use one session-id mapping.
+- `parent_tool_call_id` uses the same mapping as `tools[].tool_call_id` and
+  `timing_events.tool_call_id`, so it still finds the parent's tool call.
+- `workflow_id` → opaque id; `agent_type` → built-in or `custom_agent_type_N`.
 - `session_type`, `run_mode`, `started_from` are closed vocabularies; any other value becomes null.
 - The user-written fields listed above never reach a row.
+- Before sanitizing, a reference must be spelled exactly like the id it points to (same `claude:` /
+  `codex:` prefix, `/` separators). Extraction guarantees this; a test checks that every parent,
+  root and parent tool call that resolves before sanitization still resolves after it.
+
+**Keyed hashing instead of order-based random ids.** v2's `StableIdSanitizer` draws each new
+pseudonym from a seeded random sequence in order of first appearance. Within one run the mapping is
+consistent, but across runs it is not:
+
+- the same session gets a different pseudonym in each run, so a parent and child sanitized in
+  different runs (per host, an incremental release, separate uploads) no longer link;
+- different sessions can get the *same* pseudonym, because each run with the same seed draws the
+  same sequence. The browser upload uses one default seed for every upload, so the first session of
+  two uploads collides and creates a false link.
+
+v3 derives every pseudonym as `HMAC-SHA256(secret, kind + ":" + original)`, truncated and formatted
+like the original (`toolu_` prefix, UUID shape, …). The same id then maps to the same pseudonym in
+any run and any order, so collections can be sanitized per host or incrementally; collisions are
+negligible. The release secret is kept private, so pseudonyms cannot be reversed. Browser uploads
+use a fresh random secret per upload: no links across uploads, but no false ones either.
+Pseudonyms change relative to v2; v3 is a new release, so v2 and v3 ids are not comparable.
+
+## DuckDB
+
+v3 adds a `sessions` table and one derived column each to `tool_calls` and `timing_events`
+(details in [`DB_SCHEMA.md`](../artifacts/utils/DB_SCHEMA.md)). The session fields are repeated on
+every JSONL row so a row stands alone, but stored once in the DB: about 15k sessions against 1.5M
+rounds, which matters because the browser loads one DB copy per worker.
+
+- **`sessions`** — one row per `session_id`: the session fields above, `host`, plus values computed
+  at build time: `parent_round_pk` (the parent's round holding `parent_tool_call_id`, i.e. where the
+  child starts on the parent's timeline), `first_at` / `last_at`, `round_count`, `input_tokens`,
+  `output_tokens`, `child_count`. Built for v2 traces too, with the v3 fields null.
+- **`tool_calls.child_session_id`** — the session a tool call started.
+- **`timing_events.from_session_id`** — for `agent_message`, the session that sent it: a Claude
+  task notification names the tool call that started the finished task; a Codex `agent_message`
+  names its sender's agent path, resolved to a session id during collection.
+
+No tree table: every session carries `root_session_id`, so a whole task is
+`WHERE root_session_id = X`; the rare deeper ancestry is a recursive query over
+`parent_session_id`. Concurrency within a task (how many sessions run at once) is computed from
+`first_at` / `last_at` by a helper, as are shared filters such as "human main sessions"
+(`session_type = 'main' AND started_from IN ('terminal', 'ide', 'desktop')`).
+
+With extraction from raw and originals preferred over replayed copies, `(provider, session_id,
+round_id)` should be unique in v3; the build reports any duplicates. `round_pk` stays the key.
 
 ## Processing
 
@@ -159,7 +206,7 @@ collection-level pass over all extracted rows then
 2. matches each Codex child to its parent's `spawn_agent` call,
 3. drops the private hints.
 
-The collector now reads the raw archives (`tracelab-raw/<host>/<run>/<user>.tar.zst`), which hold
+The collector will read the raw archives (`tracelab-raw/<host>/<run>/<user>.tar.zst`), which hold
 every store on every host, so both lookups see the parent. A session whose parent is not in the
 collection keeps `parent_session_id` and gets `root_session_id: null`.
 
@@ -171,21 +218,22 @@ over one without; a row whose `session_id` owns the file over a replayed copy; t
 
 ## Compatibility
 
-- v2 rows have no v3 fields; readers treat them as unknown. Analyze already hides the hierarchy UI
-  when the columns are absent (#30).
+- v2 rows have no v3 fields; readers treat them as unknown, and the Analyze hierarchy views hide
+  when the columns are absent.
 - `trace_db` pins the new string columns to VARCHAR, `nesting_depth` to BIGINT and
   `copied_parent_history` to BOOLEAN, so all-null columns do not infer as JSON.
+- Sanitized ids change (keyed hashing); v2 and v3 pseudonyms do not match.
 - Re-extracting v2-era sessions from raw changes `user_message` counts where Claude records carry
   `origin` / `isMeta`; the release notes must say so.
 
 ## Plan
 
-1. Rebase #30 on main, rename its fields as above, fold in #37's `parentAgentId` / `root_session_id` logic, close #37 with
-   credit.
-2. Add `nesting_depth`, `parent_tool_call_id`, `run_mode`, `copied_parent_history`, `started_from`,
-   `format_version`, and the collection-level pass.
+1. A new PR implements this format; its description credits #30 (hierarchy fields, sanitizer,
+   Analyze session tree) and #37 (`parentAgentId`, `root_session_id`).
+2. Session fields and the collection-level pass; keyed-hash sanitizer.
 3. Split input events (`agent_message`, `system_message`); add `tool_search_output` as a tool
    result (Codex).
 4. Merge preference for originals over replayed copies.
-5. Collector reads raw archives; re-extract everything and compare totals with the 2026-10-16
+5. DuckDB: `sessions` table, `child_session_id`, `from_session_id`.
+6. Collector reads raw archives; re-extract everything and compare totals with the 2026-10-16
    accounting (1,547,073 rounds, 279.2B input).
